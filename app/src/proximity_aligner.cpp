@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "parameters.h"
 #include "proximity_aligner.h"
+#include "polygon_decompoe_utils.h"
 
 namespace LxGeo
 {
@@ -68,6 +69,8 @@ namespace LxGeo
 			// Load shapefile
 			PolygonsShapfileIO sample_shape;
 			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
+			
+			SupportPoints c_sup_pts = decompose_polygons(sample_shape.geometries_container);
 			bool a = true;
 		}
 
