@@ -3,12 +3,11 @@
 #include "defs.h"
 #include "parameters.h"
 #include "proximity_aligner.h"
-#include "polygon_decompoe_utils.h"
-#include "proximity_triplet.h"
 #include "raster_stitch.h"
 #include "graph_weights/polygons_spatial_weights.h"
 #include "graph_weights/spatial_weights.h"
 #include "geometries_with_attributes/linestring_with_attributes.h"
+#include "alignment_basic_optim.h"
 
 namespace LxGeo
 {
@@ -82,27 +81,22 @@ namespace LxGeo
 			PolygonsShapfileIO sample_shape;
 			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
 			
-			SupportPoints c_sup_pts = decompose_polygons(sample_shape.geometries_container);
+			std::vector<Boost_Polygon_2> aligned_polygon=alignmentIteration(rasters_map, sample_shape.geometries_container);
 
-			std::vector<PixelCoords> c_sup_pixels; c_sup_pixels.reserve(c_sup_pts.polygon_indices.size());
-			//# Use transform below
-			for (auto& pt : c_sup_pts.support_points) c_sup_pixels.push_back(ref_raster.get_pixel_coords(pt));
-			
-			ProximityTripletLoader PTL(rasters_map["proximity"].raster_data,
-				rasters_map["grad_x"].raster_data,
-				rasters_map["grad_y"].raster_data);
+			std::vector<Boost_Polygon_2> aligned_polygon2 = alignmentIteration(rasters_map, aligned_polygon);
 
-			std::vector<ProximityTriplet> proximity_triplets; proximity_triplets.reserve(c_sup_pixels.size());
-			for (auto& pt : c_sup_pixels) proximity_triplets.push_back(PTL.readTripletAt(pt));
-			
-			PolygonSpatialWeights PSW = PolygonSpatialWeights(sample_shape.geometries_container);
+			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
+			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon2);
+			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
+
+			/*PolygonSpatialWeights PSW = PolygonSpatialWeights(sample_shape.geometries_container);
 			WeightsDistanceBandParams wdbp = { 1, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
 			PSW.fill_distance_band_graph(wdbp);
 			PSW.run_labeling();
 			std::vector<LineString_with_attributes> edges_line_strings = PSW.export_edge_graph_as_LSwithAttr();
 			LineStringShapfileIO edges_out_shapefile = LineStringShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
 			edges_out_shapefile.write_linestring_shapefile(edges_line_strings);
-			bool a = true;
+			bool a = true;*/
 		}
 
 	}
