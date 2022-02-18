@@ -8,6 +8,8 @@
 #include "graph_weights/spatial_weights.h"
 #include "geometries_with_attributes/linestring_with_attributes.h"
 #include "alignment_basic_optim.h"
+#include "alignment_iterative_support_optim.h"
+#include "alignment_neighbour_optim.h"
 
 namespace LxGeo
 {
@@ -81,12 +83,11 @@ namespace LxGeo
 			PolygonsShapfileIO sample_shape;
 			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
 			
-			std::vector<Boost_Polygon_2> aligned_polygon=alignmentIteration(rasters_map, sample_shape.geometries_container);
+			std::vector<Boost_Polygon_2> aligned_polygon= alignmentNeighbour(rasters_map, sample_shape.geometries_container);
 
-			std::vector<Boost_Polygon_2> aligned_polygon2 = alignmentIteration(rasters_map, aligned_polygon);
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
-			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon2);
+			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
 			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
 
 			/*PolygonSpatialWeights PSW = PolygonSpatialWeights(sample_shape.geometries_container);
