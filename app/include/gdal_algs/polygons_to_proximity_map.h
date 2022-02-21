@@ -1,0 +1,21 @@
+#pragma once
+#include "defs.h"
+#include "io_shapefile.h"
+
+namespace LxGeo
+{
+    namespace lxProximityAlign
+    {
+
+		enum ProximityMapStrategy
+		{
+			vertex_only = 1 << 0,
+			contours = 1 << 1,
+			filled_polygon = 1 << 2
+		};
+
+		void polygons2proximity(IO_DATA::PolygonsShapfileIO& input_shapefile, std::string& out_proximity_map_path, OGREnvelope* out_extents =NULL,
+			double raster_px_size=0.5, double raster_py_size=0.5, ProximityMapStrategy startegy = ProximityMapStrategy::contours);
+
+    }
+}
