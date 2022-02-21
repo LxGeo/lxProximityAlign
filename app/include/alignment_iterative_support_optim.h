@@ -9,7 +9,7 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		std::vector<Boost_Polygon_2> iterative_support_alignment(std::map<std::string, RasterIO>& rasters_map, std::vector<Boost_Polygon_2>& input_polygons);
+		std::vector<Boost_Polygon_2> iterative_support_alignment(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons);
 
 	}
 }

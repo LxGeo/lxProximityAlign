@@ -13,10 +13,8 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		std::vector<Boost_Polygon_2> alignmentNeighbour(std::map<std::string, RasterIO>& rasters_map, std::vector<Boost_Polygon_2>& input_polygons) {
+		std::vector<Boost_Polygon_2> alignmentNeighbour(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons) {
 
-
-			RasterIO& ref_raster = rasters_map["proximity"];
 			// Support point generation
 			SupportPoints c_sup_pts = decompose_polygons(input_polygons, SupportPointsStrategy::vertex_and_mid_point);
 
@@ -28,9 +26,9 @@ namespace LxGeo
 			);
 
 			// proximity triplet reader creation (used to read seperate pixel values from image arrays)
-			ProximityTripletLoader PTL(rasters_map["proximity"].raster_data,
-				rasters_map["grad_x"].raster_data,
-				rasters_map["grad_y"].raster_data);
+			ProximityTripletLoader PTL(matrices_map["proximity"],
+				matrices_map["grad_x"],
+				matrices_map["grad_y"]);
 
 			// Read proximity triplet
 			std::vector<ProximityTriplet> proximity_triplets; proximity_triplets.reserve(c_sup_pixels.size());
@@ -42,7 +40,6 @@ namespace LxGeo
 			std::transform(proximity_triplets.begin(), proximity_triplets.end(),
 				std::back_inserter(support_points_disp),
 				ptl_aggregator_function
-				//[&](ProximityTriplet& a)->SpatialCoords { return { a.prox_value * sign(a.grad_y) , a.prox_value * sign(a.grad_x) }; }
 			);
 
 			////// aggeragte disparites by polygon
@@ -52,7 +49,7 @@ namespace LxGeo
 
 			// Spatial weights
 			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
-			WeightsDistanceBandParams wdbp = { 1, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
+			WeightsDistanceBandParams wdbp = { 0, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
 			PSW.fill_distance_band_graph(wdbp);
 			PSW.run_labeling();
 
