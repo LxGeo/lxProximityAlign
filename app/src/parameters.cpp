@@ -31,9 +31,7 @@ namespace LxGeo
 			printed_help = false;
 
 			input_shapefile_to_align.clear();
-			input_proximity_raster_path.clear();
-			x_g_raster_path.clear();
-			y_g_raster_path.clear();
+			input_ref_shapefile.clear();
 
 			output_basename = "result";
 			output_shapefile = "result.shp";
@@ -55,10 +53,8 @@ namespace LxGeo
 				<< "** Basic parameters : " << std::endl
 				<< std::endl
 				<< "  [-ishp] [input_shapefile_to_align] -> provide path of input target shapefile" << std::endl
-				<< "  [-iprox] [input_proximity_raster_path] -> provide path of input proximity raster" << std::endl
+				<< "  [-rshp] [input_ref_shapefile] -> provide path of input reference shapefile" << std::endl
 				<< "  [-o] [basename] -> specify basename of output file" << std::endl
-				<< "  [--i_x_grad] [-xg] [x_g_raster_path] -> specify X axis gradient raster" << std::endl
-				<< "  [--i_y_grad] [-yg] [y_g_raster_path] -> specify Y axis gradient raster" << std::endl
 				<< "  [--overwrite_output] -> flag to overwrite output if exists" << std::endl
 				<< std::endl
 				<< "Version compiled on : " << __DATE__ << std::endl;
@@ -87,8 +83,8 @@ namespace LxGeo
 					input_shapefile_to_align = argv[r + 1];
 					r += 2;
 				}
-				else if (arg == "-iprox" && r + 1 < argc) {
-					input_proximity_raster_path = argv[r + 1];
+				else if (arg == "-rshp" && r + 1 < argc) {
+					input_ref_shapefile = argv[r + 1];
 					r += 2;
 				}
 				else if ((arg == "-o" || arg == "--output") && r + 1 < argc) {
@@ -103,14 +99,6 @@ namespace LxGeo
 					}
 					r += 2;
 
-				}				
-				else if ((arg == "--i_x_grad" || arg == "-xg") && r + 1 < argc) {
-					x_g_raster_path = argv[r + 1];
-					r += 2;
-				}
-				else if ((arg == "--i_y_grad" || arg == "-yg") && r + 1 < argc) {
-					y_g_raster_path = argv[r + 1];
-					r += 2;
 				}
 				else if (arg == "--overwrite_output") {
 					overwrite_output = true;

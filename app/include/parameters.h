@@ -27,21 +27,14 @@ namespace LxGeo
 			bool printed_help;
 
 			std::string input_shapefile_to_align;
-			std::string input_proximity_raster_path;
+			std::string input_ref_shapefile;
 
 			std::string output_basename;
 			std::string output_shapefile;
 
-			std::string x_g_raster_path;
-			std::string y_g_raster_path;
-
 			std::string temp_dir;
 
 			bool overwrite_output;
-
-			double X_TRANSLATION;
-			double Y_TRANSLATION;
-
 
 		};
 
