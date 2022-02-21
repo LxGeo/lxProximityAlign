@@ -50,7 +50,7 @@ namespace LxGeo
 			if (ptl.grad_x == 0 && ptl.grad_y == 0) return{ 0,0 };
 			double grad_x_sq = ptl.grad_x * ptl.grad_x, grad_y_sq = ptl.grad_y * ptl.grad_y;
 			SpatialCoords out_disp{
-			ptl.prox_value * sign(ptl.grad_y) * grad_y_sq / (grad_x_sq + grad_y_sq),
+			-ptl.prox_value * sign(ptl.grad_y) * grad_y_sq / (grad_x_sq + grad_y_sq),
 			ptl.prox_value * sign(ptl.grad_x) * grad_x_sq / (grad_x_sq + grad_y_sq)
 			};
 			return out_disp;
