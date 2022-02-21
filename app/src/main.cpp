@@ -22,7 +22,8 @@ int main(int argc, char* argv[])
 
 	// Runs process
 	ProximityAligner d_t= ProximityAligner();
-	d_t.run();
+	if (d_t.pre_check())
+		d_t.run();
 
 	// Quits
 	delete kgdal2cv;

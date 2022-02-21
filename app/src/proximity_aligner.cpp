@@ -11,6 +11,8 @@
 #include "alignment_iterative_support_optim.h"
 #include "alignment_neighbour_optim.h"
 
+#include "gdal_algs/polygons_to_proximity_map.h"
+
 namespace LxGeo
 {
 
@@ -22,27 +24,18 @@ namespace LxGeo
 
 			std::cout << "Pre check input parameters" << std::endl;
 
-			RasterIO ref_raster = RasterIO();
-			if (!ref_raster.load_raster(params->input_proximity_raster_path.c_str())) {
-				std::cout << "Cannot load proximity raster at: " << params->input_proximity_raster_path.c_str() << std::endl;
+			PolygonsShapfileIO target_shape, ref_shape;
+			bool target_loaded = target_shape.load_shapefile(params->input_shapefile_to_align, true);
+			if (!target_loaded) {
+				std::cout << "Error loading shapefile to align at: " << params->input_shapefile_to_align << std::endl;
 				return false;
 			}
-			
-			std::list<std::string> rasters_list = { params->input_proximity_raster_path, params->x_g_raster_path, params->y_g_raster_path };
-			for (auto& c_raster_path : rasters_list){
-				RasterIO temp_raster = RasterIO();
-				// correct raster path check
-				if (!temp_raster.load_raster(c_raster_path.c_str())) {
-					std::cout << "Cannot load raster at: " << c_raster_path.c_str() << std::endl;
-					return false;
-				}
-				if (!temp_raster.compare(ref_raster)) {
-					std::cout << "Raster at: " << c_raster_path.c_str() << " doesn't match proximity raster!" << std::endl;
-					return false;
-				}
-
-
+			bool ref_loaded = ref_shape.load_shapefile(params->input_ref_shapefile, true);
+			if (!ref_loaded) {
+				std::cout << "Error loading reference shapefile at: " << params->input_ref_shapefile << std::endl;
+				return false;
 			}
+
 
 			//output dirs creation
 			boost::filesystem::path output_path(params->output_basename);
@@ -57,6 +50,7 @@ namespace LxGeo
 
 			if (!boost::filesystem::exists(output_temp_path))
 			{
+				boost::filesystem::create_directory(output_temp_path);
 				std::cout << fmt::format("Directory Created: {}", output_temp_path.string()) << std::endl;
 			}
 
@@ -72,18 +66,32 @@ namespace LxGeo
 
 		void ProximityAligner::run() {
 
-			std::map<std::string, RasterIO> rasters_map;
-			rasters_map["proximity"] = RasterIO(params->input_proximity_raster_path, GA_ReadOnly, false);
-			rasters_map["grad_x"] = RasterIO(params->x_g_raster_path, GA_ReadOnly, false);
-			rasters_map["grad_y"] = RasterIO(params->y_g_raster_path, GA_ReadOnly, false);
+			PolygonsShapfileIO target_shape, ref_shape;
+			bool target_loaded = target_shape.load_shapefile(params->input_shapefile_to_align, true);
+			bool ref_loaded = ref_shape.load_shapefile(params->input_ref_shapefile, true);
+			// get common AOI extents
+			OGREnvelope target_envelope, ref_envelope;
+			target_shape.vector_layer->GetExtent(&target_envelope); ref_shape.vector_layer->GetExtent(&ref_envelope);
+			OGREnvelope union_envelope(target_envelope); union_envelope.Merge(ref_envelope);
 						
-			RasterIO& ref_raster = rasters_map["proximity"];
+			std::string out_proximity = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
+			polygons2proximity(ref_shape, out_proximity, &union_envelope);
+
+			RasterIO& ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
+
+			std::map<std::string, matrix> matrices_map;
+			matrices_map["proximity"] = ref_raster.raster_data;
+			matrix grad_x; cv::Sobel(ref_raster.raster_data, grad_x, CV_32FC1, 0, 1);
+			matrix grad_y; cv::Sobel(ref_raster.raster_data, grad_y, CV_32FC1, 1, 0);
+			matrices_map["grad_x"] = grad_x; //RasterIO(params->x_g_raster_path, GA_ReadOnly, false);
+			matrices_map["grad_y"] = grad_y; //RasterIO(params->y_g_raster_path, GA_ReadOnly, false);
+
 			
 			// Load shapefile
 			PolygonsShapfileIO sample_shape;
 			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
 			
-			std::vector<Boost_Polygon_2> aligned_polygon= alignmentNeighbour(rasters_map, sample_shape.geometries_container);
+			std::vector<Boost_Polygon_2> aligned_polygon= alignmentNeighbour(matrices_map, ref_raster, sample_shape.geometries_container);
 
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
