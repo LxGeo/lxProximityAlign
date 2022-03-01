@@ -19,7 +19,7 @@ namespace LxGeo
 				for (auto& c_polygon : input_polygons) {
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
-					for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
+					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
 
 					for (auto c_ring : c_polygon_rings) {
 
@@ -39,7 +39,7 @@ namespace LxGeo
 				return out_support_points;
 			}
 			else if((decompose_strategy == SupportPointsStrategy::constant_walker)){
-				double STEP_LENGTH = 1.0;
+				double STEP_LENGTH = 5.0;
 				// reserve vectors memory
 				out_support_points.polygon_indices().reserve(Constants::MEAN_PTS_PER_POLYGON * 10);
 				out_support_points.support_points().reserve(Constants::MEAN_PTS_PER_POLYGON * 10);
@@ -48,7 +48,7 @@ namespace LxGeo
 				for (auto& c_polygon : input_polygons) {
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
-					for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
+					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
 
 					for (auto& c_ring : c_polygon_rings) {
 
@@ -74,7 +74,7 @@ namespace LxGeo
 				for (auto& c_polygon : input_polygons) {
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
-					for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
+					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
 
 					for (auto& c_ring : c_polygon_rings) {
 						out_support_points.polygon_indices().insert(out_support_points.polygon_indices().end(), c_ring->size(), c_polygon_idx);
