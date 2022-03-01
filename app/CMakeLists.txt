@@ -5,6 +5,19 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 
 set(EXECUTABLE_OUTPUT_PATH ../../out/bin/${CMAKE_BUILD_TYPE})
 
+set(EIGEN3_4_INCLUDE_DIR "$ENV{EIGEN3_4_INCLUDE_DIR}")
+if(NOT EIGEN3_4_INCLUDE_DIR)
+    message(FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen3_4 installation.")
+endif()
+include_directories ("${EIGEN3_4_INCLUDE_DIR}")
+
+set(OPTIM_INCLUDE_DIR "$ENV{OPTIM_INCLUDE_DIR}")
+if(NOT OPTIM_INCLUDE_DIR)
+    message(FATAL_ERROR "Please point the environment variable OPTIM_INCLUDE_DIR to the include directory of your optim installation.")
+endif()
+include_directories ("${OPTIM_INCLUDE_DIR}")
+
+
 find_package(Boost REQUIRED COMPONENTS filesystem log)
 if(Boost_FOUND)
 	set(Boost_USE_STATIC_LIBS ON)
