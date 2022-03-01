@@ -10,6 +10,7 @@
 #include "alignment_basic_optim.h"
 #include "alignment_iterative_support_optim.h"
 #include "alignment_neighbour_optim.h"
+#include "alignment_neighbour_proximity_aware.h"
 
 #include "gdal_algs/polygons_to_proximity_map.h"
 
@@ -33,6 +34,11 @@ namespace LxGeo
 			bool ref_loaded = ref_shape.load_shapefile(params->input_ref_shapefile, true);
 			if (!ref_loaded) {
 				std::cout << "Error loading reference shapefile at: " << params->input_ref_shapefile << std::endl;
+				return false;
+			}
+
+			if (!target_shape.spatial_refrence->IsSame(ref_shape.spatial_refrence)) {
+				std::cout << "Input shapefiles have different spatial reference system!" << std::endl;
 				return false;
 			}
 
@@ -75,7 +81,7 @@ namespace LxGeo
 			OGREnvelope union_envelope(target_envelope); union_envelope.Merge(ref_envelope);
 						
 			std::string out_proximity = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
-			polygons2proximity(ref_shape, out_proximity, &union_envelope);
+			polygons2proximity(ref_shape, out_proximity, &union_envelope, 0.5,0.5,ProximityMapStrategy::contours);
 
 			RasterIO& ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
 
@@ -83,6 +89,15 @@ namespace LxGeo
 			matrices_map["proximity"] = ref_raster.raster_data;
 			matrix grad_x; cv::Sobel(ref_raster.raster_data, grad_x, CV_32FC1, 0, 1);
 			matrix grad_y; cv::Sobel(ref_raster.raster_data, grad_y, CV_32FC1, 1, 0);
+			if (true) { //save gradients
+				RasterIO grad_x_raster = RasterIO(ref_raster, grad_x);
+				RasterIO grad_y_raster = RasterIO(ref_raster, grad_y);
+				std::string grad_x_out_path = (boost::filesystem::path(params->temp_dir) / "grad_x.tif").string();
+				std::string grad_y_out_path = (boost::filesystem::path(params->temp_dir) / "grad_y.tif").string();
+				grad_x_raster.write_raster(grad_x_out_path, false);
+				grad_y_raster.write_raster(grad_y_out_path, false);
+
+			}
 			matrices_map["grad_x"] = grad_x; //RasterIO(params->x_g_raster_path, GA_ReadOnly, false);
 			matrices_map["grad_y"] = grad_y; //RasterIO(params->y_g_raster_path, GA_ReadOnly, false);
 
@@ -96,6 +111,7 @@ namespace LxGeo
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
 			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
+			std::cout << "Writing outfile!" << std::endl;
 			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
 
 			/*PolygonSpatialWeights PSW = PolygonSpatialWeights(sample_shape.geometries_container);
