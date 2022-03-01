@@ -28,11 +28,17 @@ namespace LxGeo
 			std::vector<parent_proprety> aggregate_points_to_polygon(std::vector<child_proprety>& children_properties,
 				std::function< parent_proprety(std::list<child_proprety>) > properties_aggregator) { return aggregate_children_to_parent(children_properties, properties_aggregator); }
 
+			template<typename child_proprety, typename parent_proprety>
+			std::vector<parent_proprety> aggregate_points_to_polygon(std::vector<child_proprety>& children_properties, std::vector<double>& children_weights,
+				std::function< parent_proprety(std::list<child_proprety>, std::list<double>) > properties_aggregator) {
+				return aggregate_children_to_parent(children_properties, children_weights,  properties_aggregator);
+			}
+
 
 		};
 
 		SupportPoints decompose_polygons(std::vector<Boost_Polygon_2>& input_polygons,
-			SupportPointsStrategy decompose_strategy = SupportPointsStrategy::vertex_and_mid_point);
+			SupportPointsStrategy decompose_strategy = SupportPointsStrategy::constant_walker);
 		
 		
 
