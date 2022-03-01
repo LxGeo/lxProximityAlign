@@ -1,3 +1,6 @@
+#include "defs.h"
+#include "parameters.h"
+#include "io_shapefile.h"
 #include "alignment_neighbour_optim.h"
 #include "polygon_decompoe_utils.h"
 #include "proximity_triplet.h"
@@ -16,7 +19,7 @@ namespace LxGeo
 		std::vector<Boost_Polygon_2> alignmentNeighbour(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons) {
 
 			// Support point generation
-			SupportPoints c_sup_pts = decompose_polygons(input_polygons, SupportPointsStrategy::vertex_and_mid_point);
+			SupportPoints c_sup_pts = decompose_polygons(input_polygons, SupportPointsStrategy::constant_walker);
 
 			// spatial to pixel coords
 			std::vector<PixelCoords> c_sup_pixels; c_sup_pixels.reserve(c_sup_pts.polygon_indices().size());
@@ -49,9 +52,14 @@ namespace LxGeo
 
 			// Spatial weights
 			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
-			WeightsDistanceBandParams wdbp = { 0, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
+			WeightsDistanceBandParams wdbp = { 5, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
 			PSW.fill_distance_band_graph(wdbp);
 			PSW.run_labeling();
+
+			std::vector<LineString_with_attributes> edges_line_strings = PSW.export_edge_graph_as_LSwithAttr();
+			std::string component_shapefile_path = (boost::filesystem::path(params->temp_dir) / "components.shp").string();
+			LineStringShapfileIO edges_out_shapefile = LineStringShapfileIO(component_shapefile_path, ref_raster.spatial_refrence);
+			edges_out_shapefile.write_linestring_shapefile(edges_line_strings);
 
 			// aggregate diparites by block
 			compositionStrucure<Boost_Polygon_2> block_to_poly_relation; 
