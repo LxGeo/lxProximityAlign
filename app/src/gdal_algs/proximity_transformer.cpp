@@ -24,6 +24,12 @@ namespace LxGeo
 			argv = CSLAddString(argv, "-DISTUNITS");
 			argv = CSLAddString(argv, "PIXEL");
 
+			argv = CSLAddString(argv, "-maxdist");
+			argv = CSLAddString(argv, "500");
+
+			argv = CSLAddString(argv, "-nodata");
+			argv = CSLAddString(argv, "0");
+
 			GDALComputeProximity(in_band, out_band, argv, NULL, NULL);
 
 			CSLDestroy(argv);

@@ -37,10 +37,10 @@ namespace LxGeo
 
             if (raster_extents) {
                 argv = CSLAddString(argv, "-te");
-                argv = CSLAddString(argv, std::to_string(raster_extents->MinX).c_str());
-                argv = CSLAddString(argv, std::to_string(raster_extents->MinY).c_str());
-                argv = CSLAddString(argv, std::to_string(raster_extents->MaxX).c_str());
-                argv = CSLAddString(argv, std::to_string(raster_extents->MaxY).c_str());
+                argv = CSLAddString(argv, std::to_string(raster_extents->MinX-1).c_str());
+                argv = CSLAddString(argv, std::to_string(raster_extents->MinY-1).c_str());
+                argv = CSLAddString(argv, std::to_string(raster_extents->MaxX+1).c_str());
+                argv = CSLAddString(argv, std::to_string(raster_extents->MaxY+1).c_str());
             }
             else {
                 OGREnvelope out_extents; pSrcLayer->GetExtent(&out_extents);
