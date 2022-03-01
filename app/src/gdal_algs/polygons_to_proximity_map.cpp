@@ -14,13 +14,8 @@ namespace LxGeo
 			double raster_px_size, double raster_py_size, ProximityMapStrategy proximity_strategy) {
 
 			std::string rasterized_out_path = (boost::filesystem::path(params->temp_dir)/"rasterized.tif").string();
-			/*
-			GDALDriver* gdal_driver = GetGDALDriverManager()->GetDriverByName("MEM");
-			OGREnvelope* raster_extents = out_extents;
-			if (!raster_extents) input_shapefile.vector_layer->GetExtent(raster_extents);
-			const OGRSpatialReference* raster_srs = input_shapefile.vector_dataset->GetSpatialRef();						
-			GDALDataset* rasterized_dataset = IO_DATA::RasterIO::create_dataset(rasterized_out_path, gdal_driver, GDT_Byte, *raster_extents, raster_px_size, raster_py_size, 1, raster_srs, NULL);
-			*/
+			
+			double constant_walker_step = 10.0;
 
             // transform geometries depending on strategy
             std::list<OGRGeometryH> geometries_to_burn;
@@ -36,13 +31,14 @@ namespace LxGeo
 					switch (proximity_strategy) {
 						case ProximityMapStrategy::vertex_only:
 						{
-							std::list<OGRLinearRing> rings;
-							rings.push_back(*P->getExteriorRing()); for (size_t in_r_idx = 0; in_r_idx < P->getNumInteriorRings(); ++in_r_idx) rings.push_back(*P->getInteriorRing(in_r_idx));
-							for (auto& c_ring : rings) {
-								for (size_t c_r_pt_idx = 0; c_r_pt_idx < c_ring.getNumPoints(); ++c_r_pt_idx) { 
+							std::list<OGRLinearRing*> rings;
+							rings.push_back(P->getExteriorRing()); for (size_t in_r_idx = 0; in_r_idx < P->getNumInteriorRings(); ++in_r_idx) rings.push_back(P->getInteriorRing(in_r_idx));
+							for (auto c_ring : rings) {
+								OGRLineString* ring_pts = c_ring->toLineString();
+								for (size_t c_r_pt_idx = 0; c_r_pt_idx < c_ring->getNumPoints(); ++c_r_pt_idx) {
 									OGRPoint c_pt;
-									c_ring.getPoint(c_r_pt_idx, &c_pt);
-									geometries_to_burn.push_back(&c_pt);
+									c_ring->getPoint(c_r_pt_idx, &c_pt);
+									geometries_to_burn.push_back(c_pt.clone());
 								}
 							}
 							break;
@@ -59,6 +55,21 @@ namespace LxGeo
 							geometries_to_burn.push_back(P);
 							break;
 						}
+						case ProximityMapStrategy::constant_walker:
+						{
+							std::list<OGRLinearRing*> rings;
+							rings.push_back(P->getExteriorRing()); for (size_t in_r_idx = 0; in_r_idx < P->getNumInteriorRings(); ++in_r_idx) rings.push_back(P->getInteriorRing(in_r_idx));
+							for (auto c_ring : rings) {
+								OGRLineString* ring_pts = c_ring->toLineString();
+								ring_pts->segmentize(constant_walker_step);
+								for (size_t c_r_pt_idx = 0; c_r_pt_idx < c_ring->getNumPoints(); ++c_r_pt_idx) {
+									OGRPoint c_pt;
+									c_ring->getPoint(c_r_pt_idx, &c_pt);
+									geometries_to_burn.push_back(c_pt.clone());
+								}
+							}
+							break;
+						}
 					}
 				}
 			}     
@@ -66,6 +77,7 @@ namespace LxGeo
 			std::string aux_shapefile_path = (boost::filesystem::path(params->temp_dir) / "aux_shapefile.shp").string();
 			switch (proximity_strategy) {
 				case ProximityMapStrategy::vertex_only:
+				case ProximityMapStrategy::constant_walker:
 				{					
 					IO_DATA::PointsShapfileIO aux_shapefile(aux_shapefile_path, input_shapefile.spatial_refrence);
 					aux_shapefile.write_geometries(geometries_to_burn);
