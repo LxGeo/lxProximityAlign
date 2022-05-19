@@ -7,7 +7,7 @@ namespace LxGeo
     namespace lxProximityAlign
     {
 
-		enum ProximityMapStrategy
+		enum class ProximityMapStrategy
 		{
 			vertex_only = 1 << 0,
 			contours = 1 << 1,

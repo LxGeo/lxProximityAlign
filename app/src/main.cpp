@@ -1,7 +1,11 @@
+#define OPTIM_ENABLE_EIGEN_WRAPPERS
+#include "optim.hpp"
+
 #include "gdal.h"
 #include "parameters.h"
 #include "GDAL_OPENCV_IO.h"
-#include "proximity_aligner.h"
+#include "optim_proximity_aligner.h"
+
 
 
 using namespace LxGeo::lxProximityAlign;
@@ -21,7 +25,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Runs process
-	ProximityAligner d_t= ProximityAligner();
+	OptimProximityAligner d_t= OptimProximityAligner();
 	if (d_t.pre_check())
 		d_t.run();
 
