@@ -1,5 +1,7 @@
 #include "raster_stitch.h"
 #include "opencv2/core.hpp"
+#include "stitchable_geometries/def_stitched_geoms.h"
+#include "stitching/raster_stitcher.h"
 
 namespace LxGeo
 {
@@ -23,7 +25,7 @@ namespace LxGeo
 					for (int i = 0; i < it.count; i++, ++it)
 						sum += ref_mat.at<float>(it.pos());
 
-					return sum / double(it.count);
+					return sum;// / double(it.count);
 				};
 
 				std::list<std::list<cv::Point>> polygons_rings_pixels_coords;
@@ -58,6 +60,44 @@ namespace LxGeo
 
 				return total_obj;
 
+			}
+			
+			if (strategy == RasterPixelsStitcherStartegy::filled_polygon) {
+				double total_obj = 0;
+				using pixel_type = cv::Vec<float, 1>;
+
+				auto ring_pixels_aggregator = [](std::list<pixel_type>& values_list) -> float {
+					// (temporary) returns sum with nan turned to max_val
+					int null_count = 0;
+					float max_val = 0.0;
+					float sum = 0.0;
+
+					for (auto& c_pixel : values_list) {
+						float c_val = c_pixel[0];
+						if (isnan(c_val)) null_count += 1;
+						else {
+							sum += c_val;
+							if (c_val > max_val) max_val = c_val;
+						}
+					}
+					return sum + max_val * null_count;
+				};
+
+				LxGeo::IO_DATA::RasterPixelsStitcher<pixel_type> temp_stitcher(ref_raster);
+				for (auto& polygon : resp_polygons) {
+					Structural_Pinned_Pixels_Boost_Polygon_2<pixel_type> c_pinned_poly;
+					if (polygon.inners().size() > 0)
+						continue;
+					boost::geometry::assign(c_pinned_poly, polygon);
+					temp_stitcher.readStructrualPixels(c_pinned_poly);
+
+					total_obj += ring_pixels_aggregator(c_pinned_poly.outer_pinned_pixel);
+					for (auto& c_inner_ring_pixels : c_pinned_poly.inners_pinned_pixels) {
+						total_obj -= ring_pixels_aggregator(c_inner_ring_pixels);
+					}
+				}
+				return total_obj;
+				
 			}
 			else
 				throw std::exception("Only contours strategy is implemented!");

@@ -10,7 +10,8 @@ namespace LxGeo
 			vertex_only = 1 << 0,
 			vertex_and_mid_point = 1 << 1,
 			constant_walker = 1 << 2,
-			contours = 1 << 3
+			contours = 1 << 3,
+			filled_polygon = 1 << 4
 		};
 
 
