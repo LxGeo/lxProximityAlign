@@ -20,7 +20,9 @@ namespace LxGeo
             // transform geometries depending on strategy
             std::list<OGRGeometryH> geometries_to_burn;
 			input_shapefile.vector_layer->ResetReading();
+			tqdm bar;
 			for (size_t j = 0; j < input_shapefile.feature_count; ++j) {
+				bar.progress(j, input_shapefile.feature_count);
 				OGRFeature* feat = input_shapefile.vector_layer->GetNextFeature();
 				if (feat == NULL) continue;
 
@@ -70,9 +72,15 @@ namespace LxGeo
 							}
 							break;
 						}
+						case ProximityMapStrategy::skeleton:
+						{
+							geometries_to_burn.push_back(BuildMultiLine(P)->clone());
+							break;
+						}
 					}
 				}
 			}     
+			bar.finish();
 
 			std::string aux_shapefile_path = (boost::filesystem::path(params->temp_dir) / "aux_shapefile.shp").string();
 			switch (proximity_strategy) {
@@ -92,6 +100,12 @@ namespace LxGeo
 				case ProximityMapStrategy::filled_polygon:
 				{
 					IO_DATA::PolygonsShapfileIO aux_shapefile(aux_shapefile_path, input_shapefile.spatial_refrence);
+					aux_shapefile.write_geometries(geometries_to_burn);
+					break;
+				}
+				case ProximityMapStrategy::skeleton:
+				{
+					IO_DATA::LineStringShapfileIO aux_shapefile(aux_shapefile_path, input_shapefile.spatial_refrence);
 					aux_shapefile.write_geometries(geometries_to_burn);
 					break;
 				}

@@ -12,7 +12,8 @@ namespace LxGeo
 			vertex_only = 1 << 0,
 			contours = 1 << 1,
 			filled_polygon = 1 << 2,
-			constant_walker = 1 << 3
+			constant_walker = 1 << 3,
+			skeleton =  1 << 4
 		};
 
 		void polygons2proximity(IO_DATA::PolygonsShapfileIO& input_shapefile, std::string& out_proximity_map_path, OGREnvelope* out_extents =NULL,
