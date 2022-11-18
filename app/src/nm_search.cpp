@@ -20,9 +20,9 @@ namespace LxGeo
 			std::vector<Boost_Polygon_2> out_geometries(input_polygons.begin(), input_polygons.end());
 			std::vector<double> geometry_traversal_weights(input_polygons.size(), DBL_MAX);
 
-			std::vector<double> neighbour_distance_band_values = numcpp::linspace(0.0, 5.0, 7);
+			std::vector<double> neighbour_distance_band_values = {1, 5, 10, 20};//numcpp::linspace(0.0, 10, 9);
 			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
-			WeightsDistanceBandParams wdbp = { 5, false, -1, [](double x)->double { return x; } };
+			WeightsDistanceBandParams wdbp = { 20, false, -1, [](double x)->double { return x; } };
 			PSW.fill_distance_band_graph(wdbp);
 
 			RasterPixelsStitcher RPR(ref_raster);
@@ -35,8 +35,11 @@ namespace LxGeo
 				return obj_val;
 			};
 
-
+			
+			float MAX_DISP=20;
 			for (auto& distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
+
+				MAX_DISP /= 2;
 
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x>*distance_val_iter;};
 				PSW.disconnect_edges(disconnection_lambda);
@@ -61,11 +64,11 @@ namespace LxGeo
 				for (size_t comp_idx = 0; comp_idx < PSW.n_components; ++comp_idx) {
 					bar.progress(comp_idx, PSW.n_components);
 					auto& init_vals = components_transforms_map[comp_idx];
-					std::list<Boost_Polygon_2> respective_polygons; for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(input_polygons[poly_idx]);
-					
+					std::list<Boost_Polygon_2> respective_polygons; for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(out_geometries[poly_idx]);
 					
 					optim::algo_settings_t c_settings;
-					//c_settings.vals_bound = true; c_settings.lower_bounds = -50 * Eigen::VectorXd::Ones(2); c_settings.upper_bounds = 50 * Eigen::VectorXd::Ones(2);
+					c_settings.iter_max = 50;
+					c_settings.vals_bound = true; c_settings.lower_bounds = -MAX_DISP * Eigen::VectorXd::Ones(2); c_settings.upper_bounds = MAX_DISP * Eigen::VectorXd::Ones(2);
 					//c_settings.print_level = 3;
 					optim::Mat_t simplex_points(3, 2);
 					simplex_points.row(0) << 1.5, 1.5;
@@ -74,15 +77,16 @@ namespace LxGeo
 					c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
 
 					bool success = optim::nm(init_vals, objective_fn, &respective_polygons, c_settings);
-					
+					if (!success) { std::cout << "optimization failed!" << std::endl; continue; }
+
 					for (auto poly_idx : components_polygons_map[comp_idx]) {
 						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(init_vals(0), init_vals(1));
 						out_geometries[poly_idx] = translate_geometry(out_geometries[poly_idx], trans_obj);
 					}
-					if (!success) std::cout << "optimization failed!" << std::endl;					
+								
 				}
 				bar.finish();
-				break;
+				//break;
 
 			}
 			return out_geometries;
