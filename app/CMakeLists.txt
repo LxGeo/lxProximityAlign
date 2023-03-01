@@ -12,11 +12,11 @@ endif()
 
 set(EXECUTABLE_OUTPUT_PATH ../../out/bin/${CMAKE_BUILD_TYPE})
 
-set(EIGEN3_4_INCLUDE_DIR "$ENV{EIGEN3_4_INCLUDE_DIR}")
-if(NOT EIGEN3_4_INCLUDE_DIR)
-    message(FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen3_4 installation.")
-endif()
-include_directories ("${EIGEN3_4_INCLUDE_DIR}")
+#set(EIGEN3_4_INCLUDE_DIR "$ENV{EIGEN3_4_INCLUDE_DIR}")
+#if(NOT EIGEN3_4_INCLUDE_DIR)
+#    message(FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen3_4 installation.")
+#endif()
+#include_directories ("${EIGEN3_4_INCLUDE_DIR}")
 
 set(OPTIM_INCLUDE_DIR "$ENV{OPTIM_INCLUDE_DIR}")
 if(NOT OPTIM_INCLUDE_DIR)
