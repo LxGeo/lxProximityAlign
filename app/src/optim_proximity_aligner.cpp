@@ -39,23 +39,23 @@ namespace LxGeo
 			//output dirs creation
 			boost::filesystem::path output_path(params->output_basename);
 			boost::filesystem::path output_parent_dirname = output_path.parent_path();
-			boost::filesystem::path output_temp_path = output_parent_dirname / params->temp_dir;
+			boost::filesystem::path output_temp_path = boost::filesystem::path(output_parent_dirname.string());//+ std::string("\\")+ params->temp_dir);
 			params->temp_dir = output_temp_path.string();
 			if (!boost::filesystem::exists(output_parent_dirname))
 			{
-				boost::filesystem::create_directory(output_parent_dirname);
-				std::cout << fmt::format("Directory Created: {}", output_parent_dirname.string()) << std::endl;
+				boost::filesystem::create_directories(output_parent_dirname);
+				//std::cout << fmt::format("Directory Created: {}", output_parent_dirname.string()) << std::endl;
 			}
 
 			if (!boost::filesystem::exists(output_temp_path))
 			{
-				boost::filesystem::create_directory(output_temp_path);
-				std::cout << fmt::format("Directory Created: {}", output_temp_path.string()) << std::endl;
+				boost::filesystem::create_directories(output_temp_path);
+				//std::cout << fmt::format("Directory Created: {}", output_temp_path.string()) << std::endl;
 			}
 
 			if (boost::filesystem::exists(output_path) && !params->overwrite_output) {
-				std::cout << fmt::format("output shapefile already exists: {}!", output_path.string()) << std::endl;
-				std::cout << fmt::format("Add --overwrite_output !", output_path.string()) << std::endl;
+				std::cout << "output shapefile already exists:!" << std::endl;
+				std::cout << "Add --overwrite_output !" << std::endl;
 				return false;
 			}
 
@@ -90,6 +90,21 @@ namespace LxGeo
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
 			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
+			for (size_t idx = 0; idx < aligned_polygon.size(); idx++) {
+				Boost_Point_2 b_c, a_c;
+				bg::centroid(sample_shape.geometries_container[idx], b_c);
+				bg::centroid(aligned_polygon[idx], a_c);
+
+				double dx = a_c.get<0>() - b_c.get<0>();
+				double dy = a_c.get<1>() - b_c.get<1>();
+				polygons_with_attrs[idx].set_double_attribute("dx", dx);
+				polygons_with_attrs[idx].set_double_attribute("dy",dy);
+				if (params->infer_height) {
+					double h = (std::abs(params->dx_cst) * (dx / params->dx_cst) + std::abs(params->dy_cst) * (dy / params->dy_cst)) / (std::abs(params->dx_cst) + std::abs(params->dy_cst));
+					polygons_with_attrs[idx].set_double_attribute("al_height", h);
+				}
+			}
+
 			std::cout << "Writing outfile!" << std::endl;
 			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
 
