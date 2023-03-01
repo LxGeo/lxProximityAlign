@@ -7,7 +7,8 @@
 #include "graph_weights/spatial_weights.h"
 #include "affine_geometry/affine_transformer.h"
 #include "raster_stitch.h"
-
+#include "io_shapefile.h"
+#include "parameters.h"
 
 
 namespace LxGeo
@@ -20,7 +21,7 @@ namespace LxGeo
 			std::vector<Boost_Polygon_2> out_geometries(input_polygons.begin(), input_polygons.end());
 			std::vector<double> geometry_traversal_weights(input_polygons.size(), DBL_MAX);
 
-			std::vector<double> neighbour_distance_band_values = {1, 5, 10, 20};//numcpp::linspace(0.0, 10, 9);
+			std::vector<double> neighbour_distance_band_values = {0.01, 1, 5, 10, 20};//numcpp::linspace(0.0, 10, 9);
 			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
 			WeightsDistanceBandParams wdbp = { 20, false, -1, [](double x)->double { return x; } };
 			PSW.fill_distance_band_graph(wdbp);
@@ -36,7 +37,7 @@ namespace LxGeo
 			};
 
 			
-			float MAX_DISP=20;
+			float MAX_DISP=60;
 			for (auto& distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 
 				MAX_DISP /= 2;
@@ -87,6 +88,11 @@ namespace LxGeo
 				}
 				bar.finish();
 				//break;
+				/*
+				PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->temp_dir + "/dist_"+std::to_string(*distance_val_iter)+".shp", nullptr);
+				auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(out_geometries);
+				std::cout << "Writing outfile!" << std::endl;
+				aligned_out_shapefile.write_shapefile(polygons_with_attrs);*/
 
 			}
 			return out_geometries;
