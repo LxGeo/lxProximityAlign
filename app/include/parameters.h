@@ -1,5 +1,7 @@
 #pragma once
 #include "defs.h"
+#include "cli/base_parameters.h"
+#include "CLI/CLI.hpp"
 #include <boost/filesystem.hpp>
 
 
@@ -19,10 +21,6 @@ namespace LxGeo
 		protected:
 			void init();
 
-			void help();
-
-			void parse(int argc, char* argv[]);
-
 		public:
 			bool printed_help;
 
@@ -35,9 +33,12 @@ namespace LxGeo
 			std::string temp_dir;
 
 			bool overwrite_output;
-			bool infer_height;
+			bool keep_geometries;
 
-			float dx_cst, dy_cst;
+			double max_disparity;
+
+			std::string imd1_path;
+			std::string imd2_path;
 
 		};
 

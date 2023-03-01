@@ -7,24 +7,32 @@ namespace LxGeo
 		Parameters::Parameters(int argc, char* argv[])
 		{
 			init();
-			parse(argc, argv);
+			CLI::App app{ "lxProximityAlign" };
+			app.add_option("--ishp", input_shapefile_to_align, "Polygons shapefile to align!")->required()->check(CLI::ExistingFile);
+			app.add_option("--rshp", input_ref_shapefile, "Polygons shapefile used as reference!")->required()->check(CLI::ExistingFile);
+			app.add_option("-o, --output", output_shapefile, "Output path of aligned polygons shapefile!");
+			app.add_option("--imd1", imd1_path, "Metadata file respective ishp!")->required()->check(CLI::ExistingFile);
+			app.add_option("--imd2", imd2_path, "Metadata file respective to rshp!")->required()->check(CLI::ExistingFile);
+			app.add_flag("--keep_geometries", keep_geometries, "Flag to keep initial geometries!");
+			app.add_option("--max_disparity", max_disparity, "Mximum search disparity in meteres!")->check(CLI::Range(1, 10000));
+
+			try {
+				\
+					(app).parse((argc), (argv)); \
+			}
+			catch (const CLI::ParseError& e) {
+				\
+					(app).exit(e); \
+			}
 			
 		}
 
-
-		Parameters::~Parameters()
-		{
-		}
-
+		Parameters::~Parameters(){}
 
 		bool Parameters::initialized()
 		{
-			bool is_initialized = !input_shapefile_to_align.empty();
-			if (!is_initialized) help();
-
-			return is_initialized;
+			return !input_shapefile_to_align.empty();
 		}
-
 
 		void Parameters::init()
 		{
@@ -32,105 +40,16 @@ namespace LxGeo
 
 			input_shapefile_to_align.clear();
 			input_ref_shapefile.clear();
+			imd1_path.clear();
+			imd2_path.clear();
 
 			output_basename = "result";
 			output_shapefile = "result.shp";
 			temp_dir = "/temp_dir/";
 			overwrite_output = false;
-			infer_height = false;
-			dx_cst = 0;
-			dy_cst = 0;
+			keep_geometries = false;
+			max_disparity = 200;
 
-		}
-
-
-		void Parameters::help()
-		{
-			if (printed_help) return;
-
-			std::cout << "lxProximityAlign.exe [args]" << std::endl
-				<< std::endl
-				<< "where [args] are : " << std::endl
-				<< "  [-h | --help] -> print this help message" << std::endl
-				<< std::endl
-				<< "** Basic parameters : " << std::endl
-				<< std::endl
-				<< "  [-ishp] [input_shapefile_to_align] -> provide path of input target shapefile" << std::endl
-				<< "  [-rshp] [input_ref_shapefile] -> provide path of input reference shapefile" << std::endl
-				<< "  [-o] [basename] -> specify basename of output file" << std::endl
-				<< "  [--overwrite_output] -> flag to overwrite output if exists" << std::endl
-				<< "  [-dx_cst] [float] -> provide constant used to infer height on x axis" << std::endl
-				<< "  [-dy_cst] [float] -> provide constant used to infer height on y axis" << std::endl
-				<< std::endl
-				<< "Version compiled on : " << __DATE__ << std::endl;
-
-			printed_help = true;
-		}
-
-
-		void Parameters::parse(int argc, char* argv[])
-		{
-			if (argc == 1) {
-				help();
-				return;
-			}
-
-			std::list<std::string> unknown_args;
-
-			size_t r = 1;
-			while (r < argc) {
-				std::string arg = argv[r];
-				if (arg == "-h" || arg == "--help") {
-					help();
-					return;
-				}
-				else if (arg == "-ishp" && r + 1 < argc) {
-					input_shapefile_to_align = argv[r + 1];
-					r += 2;
-				}
-				else if (arg == "-rshp" && r + 1 < argc) {
-					input_ref_shapefile = argv[r + 1];
-					r += 2;
-				}
-				else if ((arg == "-o" || arg == "--output") && r + 1 < argc) {
-					std::string f = argv[r + 1];
-					std::string extension = (f.size() > 4 ? f.substr(f.size() - 4, 4) : "");
-					if (extension == ".shp" || extension == ".shp") {
-						output_shapefile = f;
-						output_basename = f.substr(0, f.size() - 4);
-					}
-					else {
-						std::cout << "Warning : invalid output filename. Writing result in result.tif" << std::endl;
-					}
-					r += 2;
-
-				}
-				else if (arg == "--overwrite_output") {
-					overwrite_output = true;
-					r += 1;
-				}
-				else if (arg == "-dx_cst") {
-					infer_height = true;
-					dx_cst = std::atof(argv[r + 1]);
-					r += 2;
-				}
-				else if (arg == "-dy_cst") {
-					infer_height = true;
-					dy_cst = std::atof(argv[r + 1]);
-					r += 2;
-				}
-				else {
-					unknown_args.push_back(arg);
-					r += 1;
-				}
-			}
-
-			if (!unknown_args.empty()) {
-				std::cout << "There were unknown arguments in command line call :" << std::endl << '\t';
-				for (const std::string& arg : unknown_args) std::cout << arg << " ";
-				std::cout << std::endl;
-				help();
-			}
 		}
 
 		Parameters* params = nullptr;
