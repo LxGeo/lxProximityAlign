@@ -3,6 +3,8 @@
 #include "io_shapefile.h"
 #include "defs.h"
 #include "parameters.h"
+#include "satellites/imd.h"
+#include "satellites/formulas.h"
 
 #include "gdal_algs/polygons_to_proximity_map.h"
 #include "nm_search.h"
@@ -35,23 +37,17 @@ namespace LxGeo
 				return false;
 			}
 
+			IMetaData imd1(params->imd1_path);
+			IMetaData imd2(params->imd2_path);
 
 			//output dirs creation
-			boost::filesystem::path output_path(params->output_basename);
+			boost::filesystem::path output_path(params->output_shapefile);
 			boost::filesystem::path output_parent_dirname = output_path.parent_path();
-			boost::filesystem::path output_temp_path = boost::filesystem::path(output_parent_dirname.string());//+ std::string("\\")+ params->temp_dir);
+			boost::filesystem::path output_temp_path = output_parent_dirname / params->temp_dir;
 			params->temp_dir = output_temp_path.string();
-			if (!boost::filesystem::exists(output_parent_dirname))
-			{
-				boost::filesystem::create_directories(output_parent_dirname);
-				//std::cout << fmt::format("Directory Created: {}", output_parent_dirname.string()) << std::endl;
-			}
 
-			if (!boost::filesystem::exists(output_temp_path))
-			{
-				boost::filesystem::create_directories(output_temp_path);
-				//std::cout << fmt::format("Directory Created: {}", output_temp_path.string()) << std::endl;
-			}
+			boost::filesystem::create_directory(output_parent_dirname);
+			boost::filesystem::create_directory(output_temp_path);
 
 			if (boost::filesystem::exists(output_path) && !params->overwrite_output) {
 				std::cout << "output shapefile already exists:!" << std::endl;
@@ -64,6 +60,11 @@ namespace LxGeo
 		}
 
 		void OptimProximityAligner::run() {
+
+			IMetaData imd1(params->imd1_path);
+			IMetaData imd2(params->imd2_path);
+
+			auto dxy = compute_roof2roof_constants(RADS(imd1.satAzimuth), RADS(imd1.satElevation), RADS(imd2.satAzimuth), RADS(imd2.satElevation));
 
 			PolygonsShapfileIO target_shape, ref_shape;
 			bool target_loaded = target_shape.load_shapefile(params->input_shapefile_to_align, true);
@@ -89,7 +90,11 @@ namespace LxGeo
 
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
-			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
+			std::vector<Geometries_with_attributes<Boost_Polygon_2>> polygons_with_attrs;
+			if (params->keep_geometries)
+				polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(sample_shape.geometries_container);
+			else
+				polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
 			for (size_t idx = 0; idx < aligned_polygon.size(); idx++) {
 				Boost_Point_2 b_c, a_c;
 				bg::centroid(sample_shape.geometries_container[idx], b_c);
@@ -99,10 +104,13 @@ namespace LxGeo
 				double dy = a_c.get<1>() - b_c.get<1>();
 				polygons_with_attrs[idx].set_double_attribute("dx", dx);
 				polygons_with_attrs[idx].set_double_attribute("dy",dy);
-				if (params->infer_height) {
-					double h = (std::abs(params->dx_cst) * (dx / params->dx_cst) + std::abs(params->dy_cst) * (dy / params->dy_cst)) / (std::abs(params->dx_cst) + std::abs(params->dy_cst));
-					polygons_with_attrs[idx].set_double_attribute("al_height", h);
-				}
+				double h;
+				if (abs(dxy.first) > abs(dxy.second))
+					h = abs(dx / dxy.first);
+				else
+					h = abs(dy / dxy.second);
+				polygons_with_attrs[idx].set_double_attribute("al_height", h);
+				
 			}
 
 			std::cout << "Writing outfile!" << std::endl;
