@@ -35,6 +35,9 @@ namespace LxGeo
 			std::string temp_dir;
 
 			bool overwrite_output;
+			bool infer_height;
+
+			float dx_cst, dy_cst;
 
 		};
 

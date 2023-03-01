@@ -35,8 +35,11 @@ namespace LxGeo
 
 			output_basename = "result";
 			output_shapefile = "result.shp";
-			temp_dir = "temp_dir";
+			temp_dir = "/temp_dir/";
 			overwrite_output = false;
+			infer_height = false;
+			dx_cst = 0;
+			dy_cst = 0;
 
 		}
 
@@ -56,6 +59,8 @@ namespace LxGeo
 				<< "  [-rshp] [input_ref_shapefile] -> provide path of input reference shapefile" << std::endl
 				<< "  [-o] [basename] -> specify basename of output file" << std::endl
 				<< "  [--overwrite_output] -> flag to overwrite output if exists" << std::endl
+				<< "  [-dx_cst] [float] -> provide constant used to infer height on x axis" << std::endl
+				<< "  [-dy_cst] [float] -> provide constant used to infer height on y axis" << std::endl
 				<< std::endl
 				<< "Version compiled on : " << __DATE__ << std::endl;
 
@@ -103,7 +108,17 @@ namespace LxGeo
 				else if (arg == "--overwrite_output") {
 					overwrite_output = true;
 					r += 1;
-				}				
+				}
+				else if (arg == "-dx_cst") {
+					infer_height = true;
+					dx_cst = std::atof(argv[r + 1]);
+					r += 2;
+				}
+				else if (arg == "-dy_cst") {
+					infer_height = true;
+					dy_cst = std::atof(argv[r + 1]);
+					r += 2;
+				}
 				else {
 					unknown_args.push_back(arg);
 					r += 1;
