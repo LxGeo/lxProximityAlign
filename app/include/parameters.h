@@ -37,8 +37,8 @@ namespace LxGeo
 
 			double max_disparity;
 
-			std::string imd1_path;
-			std::string imd2_path;
+			std::string r_imd_path;
+			std::string i_imd_path;
 
 		};
 
