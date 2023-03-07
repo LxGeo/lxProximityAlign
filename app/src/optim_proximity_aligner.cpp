@@ -37,8 +37,8 @@ namespace LxGeo
 				return false;
 			}
 
-			IMetaData imd1(params->imd1_path);
-			IMetaData imd2(params->imd2_path);
+			IMetaData r_imd(params->r_imd_path);
+			IMetaData i_imd(params->i_imd_path);
 
 			//output dirs creation
 			boost::filesystem::path output_path(params->output_shapefile);
@@ -61,10 +61,10 @@ namespace LxGeo
 
 		void OptimProximityAligner::run() {
 
-			IMetaData imd1(params->imd1_path);
-			IMetaData imd2(params->imd2_path);
+			IMetaData r_imd(params->r_imd_path);
+			IMetaData i_imd(params->i_imd_path);
 
-			auto dxy = compute_roof2roof_constants(RADS(imd1.satAzimuth), RADS(imd1.satElevation), RADS(imd2.satAzimuth), RADS(imd2.satElevation));
+			auto dxy = compute_roof2roof_constants(RADS(i_imd.satAzimuth), RADS(i_imd.satElevation), RADS(r_imd.satAzimuth), RADS(r_imd.satElevation));
 
 			PolygonsShapfileIO target_shape, ref_shape;
 			bool target_loaded = target_shape.load_shapefile(params->input_shapefile_to_align, true);
@@ -86,7 +86,8 @@ namespace LxGeo
 			PolygonsShapfileIO sample_shape;
 			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
 
-			std::vector<Boost_Polygon_2> aligned_polygon = nm_proximity_align(matrices_map, ref_raster, sample_shape.geometries_container);
+			std::vector<Boost_Polygon_2> aligned_polygon = nm_proximity_align_1d(matrices_map, ref_raster, sample_shape.geometries_container, dxy);
+			//std::vector<Boost_Polygon_2> aligned_polygon = nm_proximity_align(matrices_map, ref_raster, sample_shape.geometries_container);
 
 
 			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
