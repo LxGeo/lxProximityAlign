@@ -6,7 +6,7 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		SupportPoints decompose_polygons(std::vector<Boost_Polygon_2>& input_polygons, SupportPointsStrategy decompose_strategy) {
+		SupportPoints decompose_polygons(std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons, SupportPointsStrategy decompose_strategy) {
 			
 			SupportPoints out_support_points;
 
@@ -16,7 +16,8 @@ namespace LxGeo
 				out_support_points.support_points().reserve(Constants::MEAN_PTS_PER_POLYGON * 2);
 				
 				size_t c_polygon_idx = 0;
-				for (auto& c_polygon : input_polygons) {
+				for (auto& c_polygon_wa : input_polygons) {
+					auto& c_polygon = c_polygon_wa.get_definition();
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
 					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
@@ -45,7 +46,8 @@ namespace LxGeo
 				out_support_points.support_points().reserve(Constants::MEAN_PTS_PER_POLYGON * 10);
 
 				size_t c_polygon_idx = 0;
-				for (auto& c_polygon : input_polygons) {
+				for (auto& c_polygon_wa : input_polygons) {
+					auto& c_polygon = c_polygon_wa.get_definition();
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
 					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);
@@ -71,7 +73,8 @@ namespace LxGeo
 				out_support_points.polygon_indices().reserve(Constants::MEAN_PTS_PER_POLYGON );
 				out_support_points.support_points().reserve(Constants::MEAN_PTS_PER_POLYGON );
 				size_t c_polygon_idx = 0;
-				for (auto& c_polygon : input_polygons) {
+				for (auto& c_polygon_wa : input_polygons) {
+					auto& c_polygon = c_polygon_wa.get_definition();
 					std::list<Boost_Ring_2*> c_polygon_rings;
 					c_polygon_rings.push_back(&c_polygon.outer());
 					//for (Boost_Ring_2& c_inner_ring : c_polygon.inners()) c_polygon_rings.push_back(&c_inner_ring);

@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "relationships/composition_struct.h"
+#include "geometries_with_attributes/geometries_with_attributes.h"
 
 namespace LxGeo
 {
@@ -37,7 +38,7 @@ namespace LxGeo
 
 		};
 
-		SupportPoints decompose_polygons(std::vector<Boost_Polygon_2>& input_polygons,
+		SupportPoints decompose_polygons(std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons,
 			SupportPointsStrategy decompose_strategy = SupportPointsStrategy::constant_walker);
 		
 		
