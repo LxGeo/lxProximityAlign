@@ -40,6 +40,8 @@ namespace LxGeo
 			std::string r_imd_path;
 			std::string i_imd_path;
 
+			std::string couple_path;
+
 		};
 
 		extern Parameters* params;
