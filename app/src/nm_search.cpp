@@ -16,9 +16,9 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		std::vector<Boost_Polygon_2> nm_proximity_align(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons) {
+		std::vector<Geometries_with_attributes<Boost_Polygon_2>> nm_proximity_align(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons) {
 
-			std::vector<Boost_Polygon_2> out_geometries(input_polygons.begin(), input_polygons.end());
+			std::vector<Geometries_with_attributes<Boost_Polygon_2>> out_geometries(input_polygons.begin(), input_polygons.end());
 			std::vector<double> geometry_traversal_weights(input_polygons.size(), DBL_MAX);
 
 			std::vector<double> neighbour_distance_band_values = {0.01, 1, 5, 10, 20};//numcpp::linspace(0.0, 10, 9);
@@ -30,8 +30,10 @@ namespace LxGeo
 
 			auto objective_fn = [&RPR](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
 				std::list<SpatialCoords> c_displacement = { { vals_inp(0), vals_inp(1) } };
-				auto resp_polys = static_cast<std::list<Boost_Polygon_2>*>(opt_data);
-				std::list<Boost_Polygon_2> translated_resp_polys= translate_geometries(*resp_polys, c_displacement);
+				auto resp_polys = static_cast<std::list<Geometries_with_attributes<Boost_Polygon_2>>*>(opt_data);
+				std::list<Boost_Polygon_2> to_translate_polygons;
+				std::transform(resp_polys->begin(), resp_polys->end(), std::back_inserter(to_translate_polygons), [](const auto& el) {return el.get_definition(); });
+				std::list<Boost_Polygon_2> translated_resp_polys= translate_geometries(to_translate_polygons, c_displacement);
 				double obj_val = RPR.readPolygonsPixels(translated_resp_polys, RasterPixelsStitcherStartegy::contours);
 				return obj_val;
 			};
@@ -66,7 +68,8 @@ namespace LxGeo
 				for (size_t comp_idx = 0; comp_idx < PSW.n_components; ++comp_idx) {
 					bar.progress(comp_idx, PSW.n_components);
 					auto& init_vals = components_transforms_map[comp_idx];
-					std::list<Boost_Polygon_2> respective_polygons; for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(out_geometries[poly_idx]);
+					std::list<Geometries_with_attributes<Boost_Polygon_2>> respective_polygons;
+					for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(out_geometries[poly_idx]);
 					
 					optim::algo_settings_t c_settings;
 					c_settings.iter_max = 50;
@@ -83,7 +86,7 @@ namespace LxGeo
 
 					for (auto poly_idx : components_polygons_map[comp_idx]) {
 						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(init_vals(0), init_vals(1));
-						out_geometries[poly_idx] = translate_geometry(out_geometries[poly_idx], trans_obj);
+						boost::geometry::transform(out_geometries[poly_idx].get_definition(), out_geometries[poly_idx].get_definition(), trans_obj);
 					}
 								
 				}
@@ -100,17 +103,18 @@ namespace LxGeo
 
 		}
 
-		std::vector<Boost_Polygon_2> nm_proximity_align_1d(
+		std::vector<Geometries_with_attributes<Boost_Polygon_2>> nm_proximity_align_1d(
 			std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster,
-			std::vector<Boost_Polygon_2>& input_polygons,
+			std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons,
 			std::pair<double, double>& r2r_constants
 		) {
 
-			std::vector<Boost_Polygon_2> out_geometries(input_polygons.begin(), input_polygons.end());
+			std::vector<Geometries_with_attributes<Boost_Polygon_2>> out_geometries(input_polygons.begin(), input_polygons.end());
 
-			std::vector<double> neighbour_distance_band_values = { 0.01, 1, 5, 10, 20 };
+			std::vector<double> neighbour_distance_band_values = { 0.01, 5, 10, 20 };
 			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
-			WeightsDistanceBandParams wdbp = { 20, false, -1, [](double x)->double { return x; } };
+			WeightsDistanceBandParams wdbp = { neighbour_distance_band_values[neighbour_distance_band_values.size()-1], false, -1, [](double x)->double { return x; }
+		};
 			PSW.fill_distance_band_graph(wdbp);
 
 			RasterPixelsStitcher RPR(ref_raster);
@@ -118,8 +122,10 @@ namespace LxGeo
 			auto objective_fn = [&RPR, &r2r_constants](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
 				auto height = vals_inp(0);
 				std::list<SpatialCoords> c_displacement = { { r2r_constants.first* height, r2r_constants.second * height } };
-				auto resp_polys = static_cast<std::list<Boost_Polygon_2>*>(opt_data);
-				std::list<Boost_Polygon_2> translated_resp_polys = translate_geometries(*resp_polys, c_displacement);
+				auto resp_polys = static_cast<std::list<Geometries_with_attributes<Boost_Polygon_2>>*>(opt_data);
+				std::list<Boost_Polygon_2> to_translate_polygons;
+				std::transform(resp_polys->begin(), resp_polys->end(), std::back_inserter(to_translate_polygons), [](const auto& el) {return el.get_definition(); });
+				std::list<Boost_Polygon_2> translated_resp_polys = translate_geometries(to_translate_polygons, c_displacement);
 				double obj_val = RPR.readPolygonsPixels(translated_resp_polys, RasterPixelsStitcherStartegy::contours);
 				return obj_val;
 			};
@@ -153,7 +159,8 @@ namespace LxGeo
 				for (size_t comp_idx = 0; comp_idx < PSW.n_components; ++comp_idx) {
 					bar.progress(comp_idx, PSW.n_components);
 					auto& init_vals = components_transforms_map[comp_idx];
-					std::list<Boost_Polygon_2> respective_polygons; for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(out_geometries[poly_idx]);
+					std::list<Geometries_with_attributes<Boost_Polygon_2>> respective_polygons;
+					for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.emplace_back(out_geometries[poly_idx]);
 
 					optim::algo_settings_t c_settings;
 					c_settings.iter_max = 50;
@@ -168,9 +175,13 @@ namespace LxGeo
 					bool success = optim::nm(init_vals, objective_fn, &respective_polygons, c_settings);
 					if (!success) { std::cout << "optimization failed!" << std::endl; continue; }
 
-					for (auto poly_idx : components_polygons_map[comp_idx]) {
-						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(r2r_constants.first * init_vals(0), r2r_constants.second*init_vals(0));
-						out_geometries[poly_idx] = translate_geometry(out_geometries[poly_idx], trans_obj);
+					double ddx = r2r_constants.first * init_vals(0);
+					double ddy = r2r_constants.second * init_vals(0);
+					for (auto poly_idx : components_polygons_map[comp_idx]) {						
+						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
+						Boost_Polygon_2 temp_polygon; bg::assign(temp_polygon, out_geometries[poly_idx].get_definition());
+						boost::geometry::transform(temp_polygon, out_geometries[poly_idx].get_definition(), trans_obj);
+						out_geometries[poly_idx].set_double_attribute("al_proba", 1/RPR.readPolygonPixels(temp_polygon, RasterPixelsStitcherStartegy::contours));						
 					}
 
 				}
