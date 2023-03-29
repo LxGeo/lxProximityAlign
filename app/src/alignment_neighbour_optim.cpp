@@ -16,7 +16,7 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		std::vector<Boost_Polygon_2> alignmentNeighbour(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons) {
+		std::vector<Boost_Polygon_2> alignmentNeighbour(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons) {
 
 			// Support point generation
 			SupportPoints c_sup_pts = decompose_polygons(input_polygons, SupportPointsStrategy::constant_walker);
@@ -51,7 +51,7 @@ namespace LxGeo
 			// maybe add linetracer to weight polygons
 
 			// Spatial weights
-			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
+			SpatialWeights<Boost_Polygon_2> PSW = SpatialWeights<Boost_Polygon_2>(input_polygons);
 			WeightsDistanceBandParams wdbp = { 5, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
 			PSW.fill_distance_band_graph(wdbp);
 			PSW.run_labeling();
@@ -73,7 +73,22 @@ namespace LxGeo
 			}
 
 			//// Align geometries
-			std::vector<Boost_Polygon_2> aligned_polygon = translate_geometries(input_polygons, polygon_disp_values);
+			std::vector<Boost_Polygon_2> aligned_polygon; aligned_polygon.reserve(input_polygons.size());
+			if (polygon_disp_values.size() == 1) {
+				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(polygon_disp_values[0].xc, polygon_disp_values[0].yc);
+				std::transform(input_polygons.begin(), input_polygons.end(), std::back_inserter(aligned_polygon), [&trans_obj](auto& el) {return translate_geometry(el.get_definition(), trans_obj); });
+			}
+			else {
+				auto it1 = input_polygons.begin();
+				auto it2 = polygon_disp_values.begin();
+				for (; it1 != input_polygons.end() && it2 != polygon_disp_values.end(); ++it1, ++it2)
+				{
+					bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(it2->xc, it2->yc);
+					aligned_polygon.push_back(
+						translate_geometry(it1->get_definition(), trans_obj)
+					);
+				}
+			}
 
 			return aligned_polygon;
 		}

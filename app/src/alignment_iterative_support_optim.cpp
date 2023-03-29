@@ -10,7 +10,7 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
-		std::vector<Boost_Polygon_2> iterative_support_alignment(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Boost_Polygon_2>& input_polygons) {
+		std::vector<Boost_Polygon_2> iterative_support_alignment(std::map<std::string, matrix>& matrices_map, RasterIO& ref_raster, std::vector<Geometries_with_attributes<Boost_Polygon_2>>& input_polygons) {
 			
 			size_t N_ITERATION = 1;
 			// proximity triplet reader creation (used to read seperate pixel values from image arrays)
@@ -55,7 +55,22 @@ namespace LxGeo
 			std::vector<SpatialCoords> polygon_disp_values = c_sup_pts.aggregate_points_to_polygon<SpatialCoords, SpatialCoords>(support_points_disp, spatial_coords_median_aggregator);
 			
 			//// Align geometries
-			std::vector<Boost_Polygon_2> aligned_polygon = translate_geometries(input_polygons, polygon_disp_values);
+			std::vector<Boost_Polygon_2> aligned_polygon; aligned_polygon.reserve(input_polygons.size());
+			if (polygon_disp_values.size() == 1) {
+				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(polygon_disp_values[0].xc, polygon_disp_values[0].yc);
+				std::transform(input_polygons.begin(), input_polygons.end(), std::back_inserter(aligned_polygon), [&trans_obj](auto& el) {return translate_geometry(el.get_definition(), trans_obj); });
+			}
+			else {
+				auto it1 = input_polygons.begin();
+				auto it2 = polygon_disp_values.begin();
+				for (; it1 != input_polygons.end() && it2 != polygon_disp_values.end(); ++it1, ++it2)
+				{
+					bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(it2->xc, it2->yc);
+					aligned_polygon.push_back(
+						translate_geometry(it1->get_definition(), trans_obj)
+					);
+				}
+			}
 
 			return aligned_polygon;
 

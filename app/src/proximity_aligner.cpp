@@ -7,12 +7,13 @@
 #include "graph_weights/polygons_spatial_weights.h"
 #include "graph_weights/spatial_weights.h"
 #include "geometries_with_attributes/linestring_with_attributes.h"
-#include "alignment_basic_optim.h"
-#include "alignment_iterative_support_optim.h"
+//#include "alignment_basic_optim.h"
+//#include "alignment_iterative_support_optim.h"
 #include "alignment_neighbour_optim.h"
-#include "alignment_neighbour_proximity_aware.h"
+//#include "alignment_neighbour_proximity_aware.h"
 
 #include "gdal_algs/polygons_to_proximity_map.h"
+#include "lightweight/geovector.h"
 
 namespace LxGeo
 {
@@ -103,13 +104,15 @@ namespace LxGeo
 
 			
 			// Load shapefile
-			PolygonsShapfileIO sample_shape;
-			bool loaded = sample_shape.load_shapefile(params->input_shapefile_to_align, false);
+			GeoVecotor<Boost_Polygon_2> in_gvector = GeoVecotor<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
+			OGRSpatialReference spatial_ref;
+			VProfile vpr = VProfile::from_gdal_dataset(load_gdal_vector_dataset_shared_ptr(params->input_shapefile_to_align));
+			spatial_ref.importFromWkt(vpr.s_crs_wkt.c_str());
 			
-			std::vector<Boost_Polygon_2> aligned_polygon= alignmentNeighbour(matrices_map, ref_raster, sample_shape.geometries_container);
+			std::vector<Boost_Polygon_2> aligned_polygon= alignmentNeighbour(matrices_map, ref_raster, in_gvector.geometries_container);
 
 
-			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, sample_shape.spatial_refrence);
+			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, &spatial_ref);
 			auto polygons_with_attrs = transform_to_geom_with_attr<Boost_Polygon_2>(aligned_polygon);
 			std::cout << "Writing outfile!" << std::endl;
 			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
