@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "io_raster.h"
+#include "geometries_with_attributes/geometries_with_attributes.h"
 
 namespace LxGeo
 {
@@ -14,6 +15,7 @@ namespace LxGeo
 			filled_polygon = 1 << 4
 		};
 
+		
 
 		using namespace LxGeo::IO_DATA;
 
@@ -24,6 +26,8 @@ namespace LxGeo
 			RasterPixelsStitcher(RasterIO& _ref_raster) { ref_raster = _ref_raster; };
 
 			double readPolygonsPixels(std::list<Boost_Polygon_2>& resp_polygons, RasterPixelsStitcherStartegy strategy);
+
+			double readPolygonPixels(Boost_Polygon_2& resp_polygon, RasterPixelsStitcherStartegy strategy);
 
 		public:
 			RasterIO ref_raster;
