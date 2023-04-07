@@ -45,7 +45,7 @@ namespace LxGeo
 		};
 
 
-		auto ptl_aggregator_function = [](ProximityTriplet& ptl)->SpatialCoords {
+		inline auto ptl_aggregator_function = [](ProximityTriplet& ptl)->SpatialCoords {
 			//return { ptl.prox_value * sign(ptl.grad_y), ptl.prox_value * sign(ptl.grad_x) };
 			if (ptl.grad_x == 0 && ptl.grad_y == 0) return{ 0,0 };
 			double grad_x_sq = ptl.grad_x * ptl.grad_x, grad_y_sq = ptl.grad_y * ptl.grad_y;

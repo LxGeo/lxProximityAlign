@@ -7,7 +7,6 @@
 #include "polygon_decompoe_utils.h"
 #include "proximity_triplet.h"
 #include "affine_geometry/affine_transformer.h"
-#include "graph_weights/polygons_spatial_weights.h"
 #include "graph_weights/spatial_weights.h"
 #include "relationships/composition_struct.h"
 
@@ -49,7 +48,13 @@ namespace LxGeo
 			);
 
 			//// translate points
-			std::vector<Boost_Point_2> translated_points = translate_geometries(c_sup_pts.support_points(), support_points_disp);
+			std::vector<Boost_Point_2> translated_points;
+			auto supp_pts = c_sup_pts.support_points();
+			for (size_t c_idx = 0; c_idx < supp_pts.size(); c_idx++) {
+				const auto& c_geom = supp_pts[c_idx];
+				SpatialCoords c_coords = ptl_aggregator_function(proximity_triplets[c_idx]);
+				translated_points.push_back(translate_geometry(c_geom, { c_coords.xc, c_coords.yc }));
+			}
 
 			// spatial to pixel coords
 			std::vector<PixelCoords> translated_sup_pixels; translated_sup_pixels.reserve(c_sup_pixels.size());
@@ -70,7 +75,7 @@ namespace LxGeo
 
 
 			// Spatial weights
-			PolygonSpatialWeights PSW = PolygonSpatialWeights(input_polygons);
+			SpatialWeights<Boost_Polygon_2> PSW = SpatialWeights<Boost_Polygon_2>(input_polygons);
 			WeightsDistanceBandParams wdbp = { 2, false, -1, [](double x)->double { return 1.0 / (1.0 + x); } };
 			PSW.fill_distance_band_graph(wdbp);
 			PSW.run_labeling();

@@ -1,7 +1,6 @@
 #include "alignment_basic_optim.h"
 #include "polygon_decompoe_utils.h"
 #include "proximity_triplet.h"
-#include "affine_geometry/affine_transformer.h"
 
 namespace LxGeo
 {

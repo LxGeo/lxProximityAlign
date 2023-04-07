@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "io_raster.h"
 #include "geometries_with_attributes/geometries_with_attributes.h"
+#include "affine_geometry/affine_transformer.h"
 
 namespace LxGeo
 {

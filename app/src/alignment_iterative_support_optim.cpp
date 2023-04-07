@@ -46,7 +46,11 @@ namespace LxGeo
 				);
 
 				//// Align geometries
-				std::vector<Boost_Point_2> aligned_support_points = translate_geometries(support_points, support_points_disp);
+				std::vector<Boost_Point_2> aligned_support_points; aligned_support_points.reserve(support_points.size());
+				for (size_t c_idx = 0; c_idx < support_points.size(); c_idx++) {
+					auto align_coords = ptl_aggregator_function(proximity_triplets[c_idx]);
+					aligned_support_points.push_back(translate_geometry(support_points[c_idx], { align_coords.xc, align_coords.yc}));
+				}
 				support_points = aligned_support_points;
 
 			}
