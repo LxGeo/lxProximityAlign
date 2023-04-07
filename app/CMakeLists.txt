@@ -70,13 +70,12 @@ endif()
 
 include_directories(include)
 include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/")
-include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/IO_DATA/include/")
+include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/io/")
 
 
 file(GLOB_RECURSE SOURCE include/* src/*)
 add_executable(${PROJECT_NAME} ${SOURCE})
 add_dependencies(${PROJECT_NAME} LxGeoFactoryShared)
-add_dependencies(${PROJECT_NAME} IO_DATA)
 
 set(USED_BOOST_LIBS ${Boost_LOG_SETUP_LIBRARY} ${Boost_LOG_LIBRARY} 
   ${Boost_FILESYSTEM_LIBRARY} ${Boost_THREAD_LIBRARY}  )
@@ -86,8 +85,5 @@ target_link_libraries(${PROJECT_NAME} ${GDAL_LIBRARIES} ${OpenCV_LIBS} fmt::fmt 
 
 target_link_libraries(${PROJECT_NAME} debug ../out/Debug/LxGeoFactoryShared)
 target_link_libraries(${PROJECT_NAME} optimized ../out/Release/LxGeoFactoryShared)
-
-target_link_libraries(${PROJECT_NAME} debug ../out/Debug/IO_DATA)
-target_link_libraries(${PROJECT_NAME} optimized ../out/Release/IO_DATA)
 
 target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})

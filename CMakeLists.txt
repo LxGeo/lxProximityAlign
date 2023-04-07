@@ -22,8 +22,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared" LxGeoFactoryShared)
-add_subdirectory("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/IO_DATA" IO_DATA)
 add_subdirectory(app)
