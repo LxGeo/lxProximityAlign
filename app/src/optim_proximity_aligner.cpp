@@ -9,6 +9,10 @@
 #include <nlohmann/json.hpp>
 #include "gdal_algs/polygons_to_proximity_map.h"
 #include "nm_search.h"
+#include "lightweight/geovector.h"
+#include "affine_geometry/affine_transformer.h"
+#include "stitching/vector_on_raster_stitcher.h"
+#include "design_pattern/extended_iterators.h"
 
 namespace LxGeo
 {
@@ -84,44 +88,73 @@ namespace LxGeo
 			std::string out_proximity = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
 			polygons2proximity(ref_shape, out_proximity, &union_envelope, 0.5, 0.5, ProximityMapStrategy::contours);
 
-			RasterIO& ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
+			RasterIO ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
+			GeoImage<cv::Mat> ref_gimg = GeoImage<cv::Mat>::from_file(out_proximity);
 
-			std::map<std::string, matrix> matrices_map;
+			std::unordered_map<std::string, matrix> matrices_map;
 			matrices_map["proximity"] = ref_raster.raster_data;
 
 			// Load shapefile
-			GeoVecotor<Boost_Polygon_2> in_gvector = GeoVecotor<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
+			GeoVector<Boost_Polygon_2> in_gvector = GeoVector<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
 			OGRSpatialReference spatial_ref;
 			VProfile vpr = VProfile::from_gdal_dataset(load_gdal_vector_dataset_shared_ptr(params->input_shapefile_to_align));
 			spatial_ref.importFromWkt(vpr.s_crs_wkt.c_str());
 
-			std::vector<Geometries_with_attributes<Boost_Polygon_2>> aligned_polygon = nm_proximity_align_1d(matrices_map, ref_raster, in_gvector.geometries_container, xy_cst);
-			//std::vector<Boost_Polygon_2> aligned_polygon = nm_proximity_align(matrices_map, ref_raster, sample_shape.geometries_container);
+			auto confidence_functor = [](numcpp::DetailedStats<float>& stats)->float {return (stats.empty())?-1: stats.mean(); };
+			std::string OBJECTIVE_FIELD_NAME = "DISPARITY";
+			nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, xy_cst, OBJECTIVE_FIELD_NAME);
+			// Assign confidence and displacement
+			RasterPixelsStitcher RPR(ref_gimg);
+			float null_value = ref_gimg.no_data.value_or(FLT_MAX);
+			for (auto& c_gwa : in_gvector.geometries_container) {
+				double disp_value = c_gwa.get_double_attribute(OBJECTIVE_FIELD_NAME);
+				double ddx = disp_value * xy_cst.first;
+				double ddy = disp_value * xy_cst.second;
+				c_gwa.set_double_attribute("ddx", ddx);
+				c_gwa.set_double_attribute("ddy", ddy);
+				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
+				auto translated_geometry = translate_geometry(c_gwa.get_definition(), trans_obj);
+				auto  stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
 
+				int consecutive_touched_sum=0, consecutive_touched_max=0;
+				int c_consecutive = 0;
+				double TH = 5.0;
+				for(const auto& c_value: stitched_pixels){
+					if (c_value < TH)
+					{
+						c_consecutive += 1;
+					}
+					else {
+						consecutive_touched_sum += c_consecutive;
+						consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
+						c_consecutive = 0;
+					}
+				}
+				consecutive_touched_sum += c_consecutive;
+				consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
 
-			PolygonsShapfileIO aligned_out_shapefile = PolygonsShapfileIO(params->output_shapefile, &spatial_ref);
-			std::vector<Geometries_with_attributes<Boost_Polygon_2>>& polygons_with_attrs = (params->keep_geometries) ? in_gvector.geometries_container : aligned_polygon;
-			
-			for (size_t idx = 0; idx < aligned_polygon.size(); idx++) {
-				Boost_Point_2 b_c, a_c;
-				bg::centroid(in_gvector[idx], b_c);
-				bg::centroid(aligned_polygon[idx].get_definition(), a_c);
+				double completness = (stitched_pixels.empty()) ? -1.0 : double(consecutive_touched_sum) / stitched_pixels.size();
+				double partial_completness = (stitched_pixels.empty())? -1.0 : double(consecutive_touched_max) / stitched_pixels.size();
 
-				double dx = a_c.get<0>() - b_c.get<0>();
-				double dy = a_c.get<1>() - b_c.get<1>();
-				polygons_with_attrs[idx].set_double_attribute("dx", dx);
-				polygons_with_attrs[idx].set_double_attribute("dy",dy);
-				double h;
-				if (abs(xy_cst.first) > abs(xy_cst.second))
-					h = abs(dx / xy_cst.first);
-				else
-					h = abs(dy / xy_cst.second);
-				polygons_with_attrs[idx].set_double_attribute("al_height", h);
-				
+				std::vector<float> adj_diff; adj_diff.reserve(stitched_pixels.size());
+				std::adjacent_difference(stitched_pixels.begin(), stitched_pixels.end(), std::back_inserter(adj_diff), [](float& a, float b) {return std::abs(a - b); });
+				double volatility = (adj_diff.size()>1) ? std::accumulate(std::next(adj_diff.begin()), adj_diff.end(), 0.0) / (adj_diff.size()-1) : -1;
+				auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
+				c_gwa.set_double_attribute("confidence", confidence_functor(stats));
+				c_gwa.set_double_attribute("variance", stats.variance());
+				c_gwa.set_double_attribute("coeff_var", stats.coeff_var());
+				c_gwa.set_double_attribute("stdev", stats.stdev());
+				c_gwa.set_double_attribute("mean", stats.mean());
+				c_gwa.set_double_attribute("cmpl", completness);
+				c_gwa.set_double_attribute("p_cmpl", partial_completness);
+				c_gwa.set_double_attribute("vola1", volatility);
+
+				if (!params->keep_geometries)
+					c_gwa.set_definition(translated_geometry);
 			}
 
 			std::cout << "Writing outfile!" << std::endl;
-			aligned_out_shapefile.write_shapefile(polygons_with_attrs);
+			in_gvector.to_file(params->output_shapefile);
 
 		}
 

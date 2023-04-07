@@ -3,8 +3,6 @@
 #include "defs.h"
 #include "parameters.h"
 #include "proximity_aligner.h"
-#include "raster_stitch.h"
-#include "graph_weights/polygons_spatial_weights.h"
 #include "graph_weights/spatial_weights.h"
 #include "geometries_with_attributes/linestring_with_attributes.h"
 //#include "alignment_basic_optim.h"
@@ -84,7 +82,7 @@ namespace LxGeo
 			std::string out_proximity = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
 			polygons2proximity(ref_shape, out_proximity, &union_envelope, 0.5,0.5,ProximityMapStrategy::contours);
 
-			RasterIO& ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
+			RasterIO ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
 
 			std::map<std::string, matrix> matrices_map;
 			matrices_map["proximity"] = ref_raster.raster_data;
@@ -104,7 +102,7 @@ namespace LxGeo
 
 			
 			// Load shapefile
-			GeoVecotor<Boost_Polygon_2> in_gvector = GeoVecotor<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
+			GeoVector<Boost_Polygon_2> in_gvector = GeoVector<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
 			OGRSpatialReference spatial_ref;
 			VProfile vpr = VProfile::from_gdal_dataset(load_gdal_vector_dataset_shared_ptr(params->input_shapefile_to_align));
 			spatial_ref.importFromWkt(vpr.s_crs_wkt.c_str());
