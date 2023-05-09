@@ -62,7 +62,7 @@ namespace LxGeo
 			boost::filesystem::path output_temp_path = output_parent_dirname / params->temp_dir;
 			params->temp_dir = output_temp_path.string();
 
-			boost::filesystem::create_directory(output_parent_dirname);
+			boost::filesystem::create_directories(output_parent_dirname);
 			boost::filesystem::create_directory(output_temp_path);
 
 			if (boost::filesystem::exists(output_path) && !params->overwrite_output) {
@@ -90,6 +90,8 @@ namespace LxGeo
 
 			RasterIO ref_raster = RasterIO(out_proximity, GA_ReadOnly, false);
 			GeoImage<cv::Mat> ref_gimg = GeoImage<cv::Mat>::from_file(out_proximity);
+			float null_value = ref_gimg.no_data.value_or(FLT_MAX);
+			RasterPixelsStitcher RPR(ref_gimg);
 
 			std::unordered_map<std::string, matrix> matrices_map;
 			matrices_map["proximity"] = ref_raster.raster_data;
@@ -100,12 +102,14 @@ namespace LxGeo
 			VProfile vpr = VProfile::from_gdal_dataset(load_gdal_vector_dataset_shared_ptr(params->input_shapefile_to_align));
 			spatial_ref.importFromWkt(vpr.s_crs_wkt.c_str());
 
+			/*A function used in the optimizer to measure how well a geometry is aligned returning a value varying between 0-1 where 0 is not aligned and 1 is perfectly aligned
+			*/
+			
 			auto confidence_functor = [](numcpp::DetailedStats<float>& stats)->float {return (stats.empty())?-1: stats.mean(); };
 			std::string OBJECTIVE_FIELD_NAME = "DISPARITY";
 			nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, xy_cst, OBJECTIVE_FIELD_NAME);
-			// Assign confidence and displacement
-			RasterPixelsStitcher RPR(ref_gimg);
-			float null_value = ref_gimg.no_data.value_or(FLT_MAX);
+			// Assign confidence and displacement			
+			
 			for (auto& c_gwa : in_gvector.geometries_container) {
 				double disp_value = c_gwa.get_double_attribute(OBJECTIVE_FIELD_NAME);
 				double ddx = disp_value * xy_cst.first;
@@ -116,26 +120,6 @@ namespace LxGeo
 				auto translated_geometry = translate_geometry(c_gwa.get_definition(), trans_obj);
 				auto  stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
 
-				int consecutive_touched_sum=0, consecutive_touched_max=0;
-				int c_consecutive = 0;
-				double TH = 5.0;
-				for(const auto& c_value: stitched_pixels){
-					if (c_value < TH)
-					{
-						c_consecutive += 1;
-					}
-					else {
-						consecutive_touched_sum += c_consecutive;
-						consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
-						c_consecutive = 0;
-					}
-				}
-				consecutive_touched_sum += c_consecutive;
-				consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
-
-				double completness = (stitched_pixels.empty()) ? -1.0 : double(consecutive_touched_sum) / stitched_pixels.size();
-				double partial_completness = (stitched_pixels.empty())? -1.0 : double(consecutive_touched_max) / stitched_pixels.size();
-
 				std::vector<float> adj_diff; adj_diff.reserve(stitched_pixels.size());
 				std::adjacent_difference(stitched_pixels.begin(), stitched_pixels.end(), std::back_inserter(adj_diff), [](float& a, float b) {return std::abs(a - b); });
 				double volatility = (adj_diff.size()>1) ? std::accumulate(std::next(adj_diff.begin()), adj_diff.end(), 0.0) / (adj_diff.size()-1) : -1;
@@ -145,8 +129,6 @@ namespace LxGeo
 				c_gwa.set_double_attribute("coeff_var", stats.coeff_var());
 				c_gwa.set_double_attribute("stdev", stats.stdev());
 				c_gwa.set_double_attribute("mean", stats.mean());
-				c_gwa.set_double_attribute("cmpl", completness);
-				c_gwa.set_double_attribute("p_cmpl", partial_completness);
 				c_gwa.set_double_attribute("vola1", volatility);
 
 				if (!params->keep_geometries)
@@ -154,7 +136,7 @@ namespace LxGeo
 			}
 
 			std::cout << "Writing outfile!" << std::endl;
-			in_gvector.to_file(params->output_shapefile);
+			in_gvector.to_file(params->output_shapefile, &spatial_ref);
 
 		}
 
