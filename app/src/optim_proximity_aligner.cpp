@@ -94,6 +94,7 @@ namespace LxGeo
 			OGREnvelope target_envelope, ref_envelope;
 			target_shape.vector_layer->GetExtent(&target_envelope); ref_shape.vector_layer->GetExtent(&ref_envelope);
 			OGREnvelope union_envelope(target_envelope); union_envelope.Merge(ref_envelope);
+			union_envelope = box_buffer(union_envelope, std::abs(MAX_DISP));
 
 			std::string out_proximity = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
 			polygons2proximity(ref_shape, out_proximity, &union_envelope, 0.5, 0.5, ProximityMapStrategy::contours);
@@ -115,34 +116,44 @@ namespace LxGeo
 			/*A function used in the optimizer to measure how well a geometry is aligned returning a value varying between 0-1 where 0 is not aligned and 1 is perfectly aligned
 			*/
 			
-			auto confidence_functor = [](numcpp::DetailedStats<float>& stats)->float {return (stats.empty())?-1: stats.mean(); };
-			std::string OBJECTIVE_FIELD_NAME = "DISPARITY";
-			nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, xy_cst, OBJECTIVE_FIELD_NAME);
+			auto fitness_from_stats_functor = [](numcpp::DetailedStats<float>& stats)->float {
+				double alpha = 0.4;
+				double objective = alpha * stats.mean() + (1.0 - alpha) * stats.variance();
+				double final_objective = (stats.empty()) ? 1e3 : objective;
+				return objective;
+			};
+			
+			std::string DISP_COLUMN_NAME = "DISP";
+
+			nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, xy_cst, fitness_from_stats_functor, MAX_DISP, DISP_COLUMN_NAME);
 			// Assign confidence and displacement			
 			
 			for (auto& c_gwa : in_gvector.geometries_container) {
-				double disp_value = c_gwa.get_double_attribute(OBJECTIVE_FIELD_NAME);
+
+				double disp_value = c_gwa.get_double_attribute(DISP_COLUMN_NAME);
 				double ddx = disp_value * xy_cst.first;
 				double ddy = disp_value * xy_cst.second;
-				c_gwa.set_double_attribute("ddx", ddx);
-				c_gwa.set_double_attribute("ddy", ddy);
 				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
-				auto translated_geometry = translate_geometry(c_gwa.get_definition(), trans_obj);
-				auto  stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
+				auto translated_geom = translate_geometry(c_gwa.get_definition(), trans_obj);
+
+				if (!params->keep_geometries) {					
+					c_gwa.set_definition(translated_geom);
+				}
+
+				auto  stitched_pixels = RPR.readPolygonPixels<float>(translated_geom, RasterPixelsStitcherStartegy::contours);
 
 				std::vector<float> adj_diff; adj_diff.reserve(stitched_pixels.size());
 				std::adjacent_difference(stitched_pixels.begin(), stitched_pixels.end(), std::back_inserter(adj_diff), [](float& a, float b) {return std::abs(a - b); });
 				double volatility = (adj_diff.size()>1) ? std::accumulate(std::next(adj_diff.begin()), adj_diff.end(), 0.0) / (adj_diff.size()-1) : -1;
 				auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
-				c_gwa.set_double_attribute("confidence", confidence_functor(stats));
+				c_gwa.set_double_attribute("confidence", fitness_from_stats_functor(stats));
 				c_gwa.set_double_attribute("variance", stats.variance());
 				c_gwa.set_double_attribute("coeff_var", stats.coeff_var());
 				c_gwa.set_double_attribute("stdev", stats.stdev());
 				c_gwa.set_double_attribute("mean", stats.mean());
+				c_gwa.set_double_attribute("max", stats.max());
+				c_gwa.set_double_attribute("min", stats.min());
 				c_gwa.set_double_attribute("vola1", volatility);
-
-				if (!params->keep_geometries)
-					c_gwa.set_definition(translated_geometry);
 			}
 
 			std::cout << "Writing outfile!" << std::endl;

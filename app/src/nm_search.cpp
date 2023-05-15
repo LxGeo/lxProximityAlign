@@ -9,8 +9,9 @@
 #include "stitching/vector_on_raster_stitcher.h"
 #include "io_shapefile.h"
 #include "parameters.h"
-#include "numcpp/stats.h"
-
+#include "optim_algo/min_search_golden_section.h"
+#include "optim_algo/particle_swarm.h"
+#include "topology/topology_datastructure.h"
 
 namespace LxGeo
 {
@@ -125,88 +126,42 @@ namespace LxGeo
 		void nm_proximity_align_1d(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_Polygon_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
 			std::pair<double, double>& r2r_constants,
-			std::string OBJECTIVE_FIELD_NAME
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
+			std::string DISP_COLUMN_NAME
 		) {
-
-
-			double MAX_DISP = params->max_disparity;
 			
-			std::vector<double> neighbour_distance_band_values = { 1, 5, 10, 20 };
+			// Init DISP field wiith zero values
+			for (auto& c_gwa : input_geovector.geometries_container)
+				c_gwa.set_double_attribute(DISP_COLUMN_NAME, 0);
+			
+			// Creating spatial weights from input geometries
 			SpatialWeights<Boost_Polygon_2> PSW = SpatialWeights<Boost_Polygon_2>::from_geovector(input_geovector);
 			WeightsDistanceBandParams wdbp = { neighbour_distance_band_values[neighbour_distance_band_values.size()-1], false, -1, [](double x)->double { return x; } };
 			PSW.fill_distance_band_graph(wdbp);
 
+			// Loading proximity map stitcher
 			RasterPixelsStitcher RPR(ref_gimg);
 			float null_value = ref_gimg.no_data.value_or(FLT_MAX);
 
-			auto geometry_alignment_evaluator = [&RPR, &null_value](const Boost_Polygon_2& ref_geometry)->double {
-				auto stitched_pixels = RPR.readPolygonPixels<float>(ref_geometry, RasterPixelsStitcherStartegy::contours);
-
-				// Measure alignment continuity where this value represents the percentage of contiguous pixels that are under a defined threshhold TH (Higher -> well aligned)
-				// Measure alignment completness where this value correspond to the percentage of values that are under a defined threshhold TH (Higher -> well aligned)
-				int consecutive_touched_sum = 0, consecutive_touched_max = 0;
-				int c_consecutive = 0;
-				double TH = 5.0;
-				for (const auto& c_value : stitched_pixels) {
-					if (c_value < TH) c_consecutive += 1;
-					else {
-						consecutive_touched_sum += c_consecutive;
-						consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
-						c_consecutive = 0;
-					}
-				}
-				consecutive_touched_sum += c_consecutive;
-				consecutive_touched_max = (c_consecutive > consecutive_touched_max) ? c_consecutive : consecutive_touched_max;
-				double alignment_continuity = (stitched_pixels.empty()) ? -1.0 : double(consecutive_touched_max) / stitched_pixels.size();
-				double alignment_completnes = (stitched_pixels.empty()) ? -1.0 : double(consecutive_touched_sum) / stitched_pixels.size();
-
+			/*****
+			*Lambda function used to return the fitness of a geometry within the proximity map 
+			*****/
+			auto geometry_fitness_evaluator = [&RPR, &null_value, &fitness_from_stats_functor](const Boost_LineString_2& ref_geometry)->double {
+				auto stitched_pixels = RPR.readLineStringPixels<float>(ref_geometry, RasterPixelsStitcherStartegy::contours);
 				// Measure detailed stats
 				auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
-
-				// The combined objective value
-				double objective = (stats.empty()) ? DBL_MAX : stats.mean(); //* stats.variance() / alignment_continuity / alignment_completnes;
-				return objective;
-			};
-
-			// init disparity
-			for (auto& c_gwa : input_geovector.geometries_container) {
-				c_gwa.set_double_attribute(OBJECTIVE_FIELD_NAME, 0.0);
-				c_gwa.set_double_attribute("OBJ", geometry_alignment_evaluator(c_gwa.get_definition()));
-			}
-
-			auto objective_fn = [&RPR, &r2r_constants, &null_value, &OBJECTIVE_FIELD_NAME, &geometry_alignment_evaluator](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
-				double obj_val = 0;
-				double OUT_OF_BOUNDS_PENALTY = 1e5;				
-
-				auto resp_gwas = static_cast<std::list<Geometries_with_attributes<Boost_Polygon_2>*>*>(opt_data);
-
-				auto c_component_height = vals_inp(0);				
-					
-				for (auto& c_gwa : *resp_gwas) {
-
-					double c_geom_height = c_gwa->get_double_attribute(OBJECTIVE_FIELD_NAME) + c_component_height;
-					bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(r2r_constants.first * c_geom_height, r2r_constants.second * c_geom_height);
-					auto translated_geometry = translate_geometry(c_gwa->get_definition(), trans_obj);
-					double c_geometry_obj_val = geometry_alignment_evaluator(translated_geometry);
-					
-					if (c_gwa->get_double_attribute("OBJ") > c_geometry_obj_val) {
-						c_gwa->set_double_attribute("OBJ", c_geometry_obj_val);
-						c_gwa->set_double_attribute(OBJECTIVE_FIELD_NAME, c_geom_height);
-					}					
-					obj_val += c_geometry_obj_val;
-				}
-				return obj_val;
+				return fitness_from_stats_functor(stats);
 			};
 			
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 
-				MAX_DISP /= 2;
-
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
 				PSW.disconnect_edges(disconnection_lambda);
 				PSW.run_labeling();
-				std::cout << "Aligning N components: " << PSW.n_components << std::endl;
+				std::cout << "Aligning " << PSW.n_components << " components! " << std::endl;
 
 				std::map<size_t, std::list<size_t>> components_polygons_map;
 				std::map<size_t, Eigen::VectorXd> components_transforms_map;
@@ -225,55 +180,80 @@ namespace LxGeo
 
 				tqdm bar;
 				GeoVector<Boost_Polygon_2> component_gvector;
+				// Aligning components one by one
 				for (size_t comp_idx = 0; comp_idx < PSW.n_components; ++comp_idx) {
+					// Get previous disparity value assigned to the broader component
+					double previous_step_disp_value = input_geovector.geometries_container[*components_polygons_map[comp_idx].begin()].get_double_attribute(DISP_COLUMN_NAME);
 					bar.progress(comp_idx, PSW.n_components);
-					auto& init_vals = components_transforms_map[comp_idx];
 					std::list<Geometries_with_attributes<Boost_Polygon_2>*> respective_polygons;
 					for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(&input_geovector.geometries_container[poly_idx]);
+					Arrangement respective_polygons_arrangment = ArrangmentFromPolygons(respective_polygons);
+					
+					// Extract component exterior edges using arrangment
+					std::list<Boost_LineString_2> component_exterior_edges;
+					for (auto eit = respective_polygons_arrangment.halfedges_begin(); eit != respective_polygons_arrangment.halfedges_end(); ++eit) {
+						// ignore if edge is shared
+						if (!eit->twin()->face()->is_unbounded())
+							continue;
+						auto& src = eit->curve().source();
+						auto& tar = eit->curve().target();
+						component_exterior_edges.push_back(
+							Boost_LineString_2({ { CGAL::to_double(src.x()), CGAL::to_double(src.y()) }, { CGAL::to_double(tar.x()), CGAL::to_double(tar.y()) } })
+						);
+					};
 
-					// Init optimizer parameters
-					optim::algo_settings_t c_settings;
-					c_settings.iter_max = 50;
-					c_settings.rel_objfn_change_tol = 5;
-					c_settings.vals_bound = true; c_settings.lower_bounds = -3 * Eigen::VectorXd::Ones(1); c_settings.upper_bounds = MAX_DISP * Eigen::VectorXd::Ones(1);
-					optim::Mat_t simplex_points(2, 1);
-					simplex_points.row(0) << MAX_DISP * ((double)rand() / RAND_MAX ); 
-					simplex_points.row(1) << MAX_DISP * ((double)rand() / RAND_MAX ); 
-					c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
-
-					bool success = optim::nm(init_vals, objective_fn, &respective_polygons, c_settings);
-					if (!success) { 
-						std::cout << "optimization failed!" << std::endl; continue;
-					}
-					else {
-						for (auto& c_gwa : respective_polygons) {
-							//c_gwa->set_double_attribute(OBJECTIVE_FIELD_NAME, init_vals(0) + c_gwa->get_double_attribute(OBJECTIVE_FIELD_NAME));
-							component_gvector.add_geometry(*c_gwa);
-							auto saved_gwa = component_gvector.geometries_container.rbegin();
-							saved_gwa->set_int_attribute("cmp_id", comp_idx);
-							double disp_value = saved_gwa->get_double_attribute(OBJECTIVE_FIELD_NAME);
-							double ddx = disp_value * r2r_constants.first;
-							double ddy = disp_value * r2r_constants.second;
-							bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
-							//saved_gwa->set_definition(translate_geometry(saved_gwa->get_definition(), trans_obj));
+					auto bound_objective = [&RPR, &r2r_constants, &null_value, &geometry_fitness_evaluator, &component_exterior_edges](double c_component_height)->double {
+						double total_fitness = 0;
+						for (auto& c_exterior_edge : component_exterior_edges) {
+							bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(r2r_constants.first * c_component_height, r2r_constants.second * c_component_height);
+							auto translated_geometry = translate_geometry(c_exterior_edge, trans_obj);
+							double c_geometry_obj_val = geometry_fitness_evaluator(translated_geometry);
+							total_fitness += c_geometry_obj_val;
 						}
+						double mean_fitness = total_fitness / component_exterior_edges.size();
+						
+						return mean_fitness;
+					};;
+
+					double min_search_bound = - MAX_DISP + previous_step_disp_value;
+					double max_search_bound =  MAX_DISP + previous_step_disp_value;
+					double optimal_value = powells_method_bounded(bound_objective, min_search_bound, max_search_bound, 0.1, 100, 5);
+					//double optimal_value = particleSwarmOptimization(bound_objective, min_search_bound, max_search_bound, 10,50);
+					/*double optimal_value = simulated_annealing_bounded(
+						bound_objective, min_search_bound, max_search_bound,
+						(max_search_bound + min_search_bound) / 2,
+						1.0, 0.95, 100);*/
+					double optimal_fitness = bound_objective(optimal_value);
+					// Ignore updating if fitness is high
+					if (optimal_fitness > 10) {
+						//std::cout << "optimization failed!" << std::endl; continue;
+						//optimal_value = 0.0;
+						//optimal_fitness = 1e3;
 					}
+
+					auto c_poly_idx = components_polygons_map[comp_idx].begin();
+					for (; c_poly_idx != components_polygons_map[comp_idx].end(); c_poly_idx++) {
+						input_geovector.geometries_container[*c_poly_idx].set_double_attribute(DISP_COLUMN_NAME, optimal_value);
+						double ddx = optimal_value * r2r_constants.first;
+						double ddy = optimal_value * r2r_constants.second;
+						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
+						auto translated_geometry = translate_geometry((input_geovector.geometries_container[*c_poly_idx]).get_definition(), trans_obj);
+
+						// add to component temporary shp
+						component_gvector.add_geometry(translated_geometry);
+						auto saved_gwa = component_gvector.geometries_container.rbegin();
+						saved_gwa->set_int_attribute("cmp_id", comp_idx);
+						saved_gwa->set_double_attribute("disp", optimal_value);
+						saved_gwa->set_double_attribute("obj", optimal_fitness);
+						auto stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
+						auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
+						saved_gwa->set_double_attribute("ind_obj", fitness_from_stats_functor(stats));
+					}
+					
 				}
 				bar.finish();
-				std::string comp_file = params->temp_dir + "//comp_" + std::to_string(*distance_val_iter) + ".shp";
-				auto geometry_shifter_functor = [&OBJECTIVE_FIELD_NAME, &r2r_constants](const Geometries_with_attributes<Boost_Polygon_2>& c_gwa) {
-					double disp_value = c_gwa.get_double_attribute(OBJECTIVE_FIELD_NAME);
-					double ddx = disp_value * r2r_constants.first;
-					double ddy = disp_value * r2r_constants.second;
-					bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
-					auto translated_geometry = translate_geometry(c_gwa.get_definition(), trans_obj);
-					auto new_gwa = Geometries_with_attributes<Boost_Polygon_2>(c_gwa);
-					new_gwa.set_definition(translated_geometry);
-					return new_gwa;
-				};
-				
-				GeoVector<Boost_Polygon_2> to_save_components; transform_geovector<Boost_Polygon_2, Boost_Polygon_2>(component_gvector, to_save_components, geometry_shifter_functor);
-				to_save_components.to_file(comp_file);
+				std::string comp_file = params->temp_dir + "//comp_" + std::to_string(*distance_val_iter) + ".shp";				
+				component_gvector.to_file(comp_file);
 			}
 		}
 
