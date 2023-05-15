@@ -7,6 +7,7 @@ namespace LxGeo
 {
 	namespace lxProximityAlign
 	{
+		using namespace LxGeo::GeometryFactoryShared;
 
 		enum SupportPointsStrategy
 		{

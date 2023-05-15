@@ -4,11 +4,14 @@
 #include "gdal_algs/rasterizer.h"
 #include "gdal_algs/proximity_transformer.h"
 #include "parameters.h"
+#include "geometry_lab.h"
 
 namespace LxGeo
 {
     namespace lxProximityAlign
     {
+
+		using namespace LxGeo::GeometryFactoryShared;
 
         void polygons2proximity(IO_DATA::PolygonsShapfileIO& input_shapefile, std::string& out_proximity_map_path, OGREnvelope* out_extents,
 			double raster_px_size, double raster_py_size, ProximityMapStrategy proximity_strategy) {
