@@ -42,6 +42,8 @@ namespace LxGeo
 
 			std::string couple_path;
 
+			std::vector<double> neighbour_distance_band_values;
+
 		};
 
 		extern Parameters* params;

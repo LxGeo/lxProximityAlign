@@ -16,6 +16,8 @@ namespace LxGeo
 			app.add_option("--couple_path", couple_path, "Json file containing epipolar creation parameters!")->check(CLI::ExistingFile);
 			app.add_flag("--keep_geometries", keep_geometries, "Flag to keep initial geometries!");
 			app.add_option("--max_disparity", max_disparity, "Mximum search disparity in meteres!")->check(CLI::Range(1, 10000));
+			app.add_option("--ndbv", neighbour_distance_band_values, "A container of neighbour distance band values used to create components! \
+				Ascending order distances, where the first value correspond to the last step distance (-1 value means disconnect all features)!");
 
 			try {
 				\
@@ -51,6 +53,7 @@ namespace LxGeo
 			overwrite_output = false;
 			keep_geometries = false;
 			max_disparity = 200;
+			neighbour_distance_band_values = { -1, 5, 10, 40 };
 
 		}
 

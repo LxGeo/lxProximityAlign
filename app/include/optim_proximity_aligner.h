@@ -32,6 +32,7 @@ namespace LxGeo
 			double couple_rotation_angle = DBL_MAX;
 			double couple_v_displacement = 0;
 			std::pair<double, double> xy_cst;
+			double MAX_DISP = 100;
 
 		};
 	}

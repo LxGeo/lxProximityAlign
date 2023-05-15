@@ -56,6 +56,16 @@ namespace LxGeo
 				IMetaData i_imd(params->i_imd_path);
 				xy_cst = compute_roof2roof_constants(RADS(i_imd.satAzimuth), RADS(i_imd.satElevation), RADS(r_imd.satAzimuth), RADS(r_imd.satElevation));
 			}
+			MAX_DISP = params->max_disparity;
+
+			// Check neighbour_distance_band_values
+			auto it = std::adjacent_find(params->neighbour_distance_band_values.begin(), params->neighbour_distance_band_values.end(), std::greater<double>());
+			if (it != params->neighbour_distance_band_values.end())
+			{
+				std::cout << "Neighbour distance band values should be in acsending order!" << std::endl;
+				return false;
+			}
+
 			//output dirs creation
 			boost::filesystem::path output_path(params->output_shapefile);
 			boost::filesystem::path output_parent_dirname = output_path.parent_path();
