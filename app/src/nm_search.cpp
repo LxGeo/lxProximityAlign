@@ -132,10 +132,13 @@ namespace LxGeo
 			double MAX_DISP,
 			std::string DISP_COLUMN_NAME
 		) {
-			
+			std::string FITT_COLUMN_NAME = "FITT";
+			double FITNESS_THRESH = 2.0;
 			// Init DISP field wiith zero values
-			for (auto& c_gwa : input_geovector.geometries_container)
+			for (auto& c_gwa : input_geovector.geometries_container) {
 				c_gwa.set_double_attribute(DISP_COLUMN_NAME, 0);
+				c_gwa.set_double_attribute(FITT_COLUMN_NAME, FLT_MAX);
+			}
 			
 			// Creating spatial weights from input geometries
 			SpatialWeights<Boost_Polygon_2> PSW = SpatialWeights<Boost_Polygon_2>::from_geovector(input_geovector);
@@ -164,8 +167,11 @@ namespace LxGeo
 				std::cout << "Aligning " << PSW.n_components << " components! " << std::endl;
 
 				std::map<size_t, std::list<size_t>> components_polygons_map;
-				std::map<size_t, Eigen::VectorXd> components_transforms_map;
 				for (size_t _idx = 0; _idx < PSW.component_labels.size(); ++_idx) {
+					double c_fitness_value = input_geovector.geometries_container[_idx].get_double_attribute(FITT_COLUMN_NAME);
+					if (c_fitness_value < FITNESS_THRESH)
+						continue;
+
 					size_t comp_id = PSW.component_labels[_idx];
 					if (components_polygons_map.find(comp_id) != components_polygons_map.end())
 						components_polygons_map[comp_id].push_back(_idx);
@@ -173,8 +179,6 @@ namespace LxGeo
 					{
 						components_polygons_map[comp_id] = std::list<size_t>();
 						components_polygons_map[comp_id].push_back(_idx);
-						components_transforms_map[comp_id] = Eigen::VectorXd(1);
-						components_transforms_map[comp_id] << MAX_DISP * (double)rand() / RAND_MAX;
 					}
 				}
 
@@ -182,11 +186,15 @@ namespace LxGeo
 				GeoVector<Boost_Polygon_2> component_gvector;
 				// Aligning components one by one
 				for (size_t comp_idx = 0; comp_idx < PSW.n_components; ++comp_idx) {
+					if (components_polygons_map[comp_idx].empty())
+						continue;
 					// Get previous disparity value assigned to the broader component
 					double previous_step_disp_value = input_geovector.geometries_container[*components_polygons_map[comp_idx].begin()].get_double_attribute(DISP_COLUMN_NAME);
 					bar.progress(comp_idx, PSW.n_components);
 					std::list<Geometries_with_attributes<Boost_Polygon_2>*> respective_polygons;
-					for (auto poly_idx : components_polygons_map[comp_idx]) respective_polygons.push_back(&input_geovector.geometries_container[poly_idx]);
+					for (auto poly_idx : components_polygons_map[comp_idx]) {
+						respective_polygons.push_back(&input_geovector.geometries_container[poly_idx]);
+					}
 					Arrangement respective_polygons_arrangment = ArrangmentFromPolygons(respective_polygons);
 					
 					// Extract component exterior edges using arrangment
@@ -215,9 +223,9 @@ namespace LxGeo
 						return mean_fitness;
 					};;
 
-					double min_search_bound = - MAX_DISP + previous_step_disp_value;
+					double min_search_bound = - MAX_DISP/2 + previous_step_disp_value;
 					double max_search_bound =  MAX_DISP + previous_step_disp_value;
-					double optimal_value = powells_method_bounded(bound_objective, min_search_bound, max_search_bound, 0.1, 100, 5);
+					double optimal_value = custom_splitting_search(bound_objective, min_search_bound, max_search_bound, 0.1, 100, 5);
 					//double optimal_value = particleSwarmOptimization(bound_objective, min_search_bound, max_search_bound, 10,50);
 					/*double optimal_value = simulated_annealing_bounded(
 						bound_objective, min_search_bound, max_search_bound,
@@ -231,13 +239,14 @@ namespace LxGeo
 						//optimal_fitness = 1e3;
 					}
 
-					auto c_poly_idx = components_polygons_map[comp_idx].begin();
-					for (; c_poly_idx != components_polygons_map[comp_idx].end(); c_poly_idx++) {
-						input_geovector.geometries_container[*c_poly_idx].set_double_attribute(DISP_COLUMN_NAME, optimal_value);
+					//auto c_poly_idx = components_polygons_map[comp_idx].begin();
+					for (auto c_poly_ptr : respective_polygons) {
+						
+						c_poly_ptr->set_double_attribute(DISP_COLUMN_NAME, optimal_value);
 						double ddx = optimal_value * r2r_constants.first;
 						double ddy = optimal_value * r2r_constants.second;
 						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
-						auto translated_geometry = translate_geometry((input_geovector.geometries_container[*c_poly_idx]).get_definition(), trans_obj);
+						auto translated_geometry = translate_geometry(c_poly_ptr->get_definition(), trans_obj);
 
 						// add to component temporary shp
 						component_gvector.add_geometry(translated_geometry);
@@ -247,7 +256,11 @@ namespace LxGeo
 						saved_gwa->set_double_attribute("obj", optimal_fitness);
 						auto stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
 						auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
-						saved_gwa->set_double_attribute("ind_obj", fitness_from_stats_functor(stats));
+						double c_polygon_fitness = fitness_from_stats_functor(stats);
+						saved_gwa->set_double_attribute("ind_obj", c_polygon_fitness);
+
+						// saving current fitness
+						c_poly_ptr->set_double_attribute(FITT_COLUMN_NAME, c_polygon_fitness);
 					}
 					
 				}
