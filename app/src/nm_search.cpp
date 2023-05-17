@@ -220,14 +220,16 @@ namespace LxGeo
 
 					auto bound_objective = [&RPR, &r2r_constants, &null_value, &geometry_fitness_evaluator, &component_exterior_edges](double c_component_height)->double {
 						double total_fitness = 0;
+						double total_length = 0;
 						for (auto& c_exterior_edge : component_exterior_edges) {
+							double c_edge_length = bg::length(c_exterior_edge);
 							bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(r2r_constants.first * c_component_height, r2r_constants.second * c_component_height);
 							auto translated_geometry = translate_geometry(c_exterior_edge, trans_obj);
-							double c_geometry_obj_val = geometry_fitness_evaluator(translated_geometry);
-							total_fitness += c_geometry_obj_val;
+							double c_geometry_obj_val = geometry_fitness_evaluator(translated_geometry) * c_edge_length;
+							total_fitness += c_geometry_obj_val* c_edge_length;
+							total_length += c_edge_length;
 						}
-						double mean_fitness = total_fitness / component_exterior_edges.size();
-						
+						double mean_fitness = total_fitness / total_length;						
 						return mean_fitness;
 					};;
 
