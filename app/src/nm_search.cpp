@@ -251,28 +251,41 @@ namespace LxGeo
 						optimal_fitness = previous_fitness;
 					}
 
-					//auto c_poly_idx = components_polygons_map[comp_idx].begin();
+					
 					for (auto c_poly_ptr : respective_polygons) {
 						
-						c_poly_ptr->set_double_attribute(DISP_COLUMN_NAME, optimal_value);
 						double ddx = optimal_value * r2r_constants.first;
 						double ddy = optimal_value * r2r_constants.second;
 						bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
 						auto translated_geometry = translate_geometry(c_poly_ptr->get_definition(), trans_obj);
-
-						// add to component temporary shp
-						component_gvector.add_geometry(translated_geometry);
-						auto saved_gwa = component_gvector.geometries_container.rbegin();
-						saved_gwa->set_int_attribute("cmp_id", comp_idx);
-						saved_gwa->set_double_attribute("disp", optimal_value);
-						saved_gwa->set_double_attribute("obj", optimal_fitness);
 						auto stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
 						auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
 						double c_polygon_fitness = fitness_from_stats_functor(stats);
-						saved_gwa->set_double_attribute("ind_obj", c_polygon_fitness);
+						double c_polygon_previous_fitness = c_poly_ptr->get_double_attribute(FITT_COLUMN_NAME);
+						double c_polygon_previous_disparity = c_poly_ptr->get_double_attribute(DISP_COLUMN_NAME);
 
-						// saving current fitness
-						c_poly_ptr->set_double_attribute(FITT_COLUMN_NAME, c_polygon_fitness);
+						bool alignment_success = c_polygon_fitness < c_polygon_previous_fitness;
+
+						// add to component temporary shp
+						if (!alignment_success) {
+							bg::strategy::transform::translate_transformer<double, 2, 2> prev_trans_obj(
+								c_polygon_previous_disparity * r2r_constants.first,
+								c_polygon_previous_disparity* r2r_constants.second
+							);
+							component_gvector.add_geometry(translate_geometry(c_poly_ptr->get_definition(), prev_trans_obj));
+						}
+						else
+							component_gvector.add_geometry( translated_geometry);
+
+						auto saved_gwa = component_gvector.geometries_container.rbegin();
+						saved_gwa->set_double_attribute("obj", optimal_fitness);
+						saved_gwa->set_int_attribute("cmp_id", comp_idx);
+						saved_gwa->set_double_attribute("disp", (alignment_success) ? optimal_value: c_polygon_previous_disparity);					
+						saved_gwa->set_double_attribute("ind_obj", (alignment_success) ? c_polygon_fitness : c_polygon_previous_fitness);
+
+						// updating fields
+						c_poly_ptr->set_double_attribute(DISP_COLUMN_NAME, (alignment_success) ? optimal_value : c_polygon_previous_disparity);
+						c_poly_ptr->set_double_attribute(FITT_COLUMN_NAME, (alignment_success) ? c_polygon_fitness : c_polygon_previous_fitness);
 					}
 					
 				}
