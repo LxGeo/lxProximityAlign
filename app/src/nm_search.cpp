@@ -199,6 +199,13 @@ namespace LxGeo
 					
 					// Extract component exterior edges using arrangment
 					std::list<Boost_LineString_2> component_exterior_edges;
+					for (auto eit = respective_polygons_arrangment.edges_begin(); eit != respective_polygons_arrangment.edges_end(); ++eit) {
+						auto& src = eit->curve().source();
+						auto& tar = eit->curve().target();
+						auto c_segment = Boost_LineString_2({ { CGAL::to_double(src.x()), CGAL::to_double(src.y()) }, { CGAL::to_double(tar.x()), CGAL::to_double(tar.y()) } });
+						component_exterior_edges.push_back(c_segment);
+					};
+					/*
 					for (auto eit = respective_polygons_arrangment.halfedges_begin(); eit != respective_polygons_arrangment.halfedges_end(); ++eit) {
 						// ignore if edge is shared
 						if (!eit->twin()->face()->is_unbounded())
@@ -209,6 +216,7 @@ namespace LxGeo
 							Boost_LineString_2({ { CGAL::to_double(src.x()), CGAL::to_double(src.y()) }, { CGAL::to_double(tar.x()), CGAL::to_double(tar.y()) } })
 						);
 					};
+					*/
 
 					auto bound_objective = [&RPR, &r2r_constants, &null_value, &geometry_fitness_evaluator, &component_exterior_edges](double c_component_height)->double {
 						double total_fitness = 0;
