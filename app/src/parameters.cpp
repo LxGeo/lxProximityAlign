@@ -52,8 +52,8 @@ namespace LxGeo
 			temp_dir = "/temp_dir/";
 			overwrite_output = false;
 			keep_geometries = false;
-			max_disparity = 200;
-			neighbour_distance_band_values = { -1, 5, 10, 40 };
+			max_disparity = 150;
+			neighbour_distance_band_values = { 0, 10, 20, 40 };
 
 		}
 
