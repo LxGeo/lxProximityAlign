@@ -5,7 +5,6 @@
 
 #include "graph_weights/spatial_weights.h"
 #include "affine_geometry/affine_transformer.h"
-//#include "raster_stitch.h"
 #include "stitching/vector_on_raster_stitcher.h"
 #include "io_shapefile.h"
 #include "parameters.h"
@@ -234,7 +233,7 @@ namespace LxGeo
 						return mean_fitness;
 					};;
 
-					double min_search_bound = - MAX_DISP/2 + previous_step_disp_value;
+					double min_search_bound = - MAX_DISP/ pyramid_level /2 + previous_step_disp_value;
 					double max_search_bound =  MAX_DISP + previous_step_disp_value;
 					double optimal_value = custom_splitting_search(bound_objective, min_search_bound, max_search_bound, 0.1, 200, 5);
 					//double optimal_value = particleSwarmOptimization(bound_objective, min_search_bound, max_search_bound, 10,50);
