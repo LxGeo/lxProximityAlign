@@ -159,7 +159,8 @@ namespace LxGeo
 				return fitness_from_stats_functor(stats);
 			};
 			
-			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
+			int pyramid_level = neighbour_distance_band_values.size();
+			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter, pyramid_level--) {
 
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
 				PSW.disconnect_edges(disconnection_lambda);
@@ -235,18 +236,19 @@ namespace LxGeo
 
 					double min_search_bound = - MAX_DISP/2 + previous_step_disp_value;
 					double max_search_bound =  MAX_DISP + previous_step_disp_value;
-					double optimal_value = custom_splitting_search(bound_objective, min_search_bound, max_search_bound, 0.1, 100, 5);
+					double optimal_value = custom_splitting_search(bound_objective, min_search_bound, max_search_bound, 0.1, 200, 5);
 					//double optimal_value = particleSwarmOptimization(bound_objective, min_search_bound, max_search_bound, 10,50);
 					/*double optimal_value = simulated_annealing_bounded(
 						bound_objective, min_search_bound, max_search_bound,
 						(max_search_bound + min_search_bound) / 2,
 						1.0, 0.95, 100);*/
 					double optimal_fitness = bound_objective(optimal_value);
+					double previous_fitness = bound_objective(0.0);
 					// Ignore updating if fitness is high
-					if (optimal_fitness > 10) {
+					if (optimal_fitness > previous_fitness) {
 						//std::cout << "optimization failed!" << std::endl; continue;
-						//optimal_value = 0.0;
-						//optimal_fitness = 1e3;
+						optimal_value = 0.0;
+						optimal_fitness = previous_fitness;
 					}
 
 					//auto c_poly_idx = components_polygons_map[comp_idx].begin();
