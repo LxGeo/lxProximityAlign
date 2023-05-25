@@ -1,5 +1,19 @@
 #pragma once
 #include "defs.h"
+#include "io_raster.h"
+#include "io_shapefile.h"
+#include "defs.h"
+#include "parameters.h"
+#include "graph_weights/spatial_weights.h"
+#include "geometries_with_attributes/linestring_with_attributes.h"
+//#include "alignment_basic_optim.h"
+//#include "alignment_iterative_support_optim.h"
+#include "alignment_neighbour_optim.h"
+//#include "alignment_neighbour_proximity_aware.h"
+
+#include "gdal_algs/polygons_to_proximity_map.h"
+#include "lightweight/geovector.h"
+
 
 namespace LxGeo
 {

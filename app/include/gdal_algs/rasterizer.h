@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
-
+#include <gdal_priv.h>
+#include "gdal_utils.h"
 
 namespace LxGeo
 {

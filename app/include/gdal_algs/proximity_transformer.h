@@ -3,6 +3,8 @@
 #include "defs.h"
 #include <gdal_priv.h>
 #include "gdal_utils.h"
+#include "gdal_alg.h"
+#include "io_raster.h"
 
 
 namespace LxGeo

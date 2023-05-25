@@ -1,18 +1,4 @@
 #include "optim_proximity_aligner.h"
-#include "io_raster.h"
-#include "io_shapefile.h"
-#include "defs.h"
-#include "parameters.h"
-#include "satellites/imd.h"
-#include "satellites/formulas.h"
-#include "lightweight/geovector.h"
-#include <nlohmann/json.hpp>
-#include "gdal_algs/polygons_to_proximity_map.h"
-#include "nm_search.h"
-#include "lightweight/geovector.h"
-#include "affine_geometry/affine_transformer.h"
-#include "stitching/vector_on_raster_stitcher.h"
-#include "design_pattern/extended_iterators.h"
 
 namespace LxGeo
 {

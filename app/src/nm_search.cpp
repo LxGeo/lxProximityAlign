@@ -1,16 +1,4 @@
-#define OPTIM_ENABLE_EIGEN_WRAPPERS
 #include "nm_search.h"
-#include "optim.hpp"
-#include "numcpp/line_space.h"
-
-#include "graph_weights/spatial_weights.h"
-#include "affine_geometry/affine_transformer.h"
-#include "stitching/vector_on_raster_stitcher.h"
-#include "io_shapefile.h"
-#include "parameters.h"
-#include "optim_algo/min_search_golden_section.h"
-#include "optim_algo/particle_swarm.h"
-#include "topology/topology_datastructure.h"
 
 namespace LxGeo
 {

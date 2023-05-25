@@ -1,10 +1,4 @@
 #include "gdal_algs/polygons_to_proximity_map.h"
-#include <gdal_alg.h>
-#include "io_raster.h"
-#include "gdal_algs/rasterizer.h"
-#include "gdal_algs/proximity_transformer.h"
-#include "parameters.h"
-#include "geometry_lab.h"
 
 namespace LxGeo
 {

@@ -3,6 +3,8 @@
 #include "io_raster.h"
 #include "geometries_with_attributes/geometries_with_attributes.h"
 #include "affine_geometry/affine_transformer.h"
+#include "polygon_decompoe_utils.h"
+#include "proximity_triplet.h"
 
 namespace LxGeo
 {

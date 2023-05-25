@@ -1,9 +1,4 @@
-#define OPTIM_ENABLE_EIGEN_WRAPPERS
-#include "optim.hpp"
-
-#include "gdal.h"
 #include "parameters.h"
-#include "GDAL_OPENCV_IO.h"
 #include "optim_proximity_aligner.h"
 
 

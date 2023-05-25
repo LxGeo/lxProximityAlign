@@ -1,7 +1,5 @@
 #include "gdal_algs/rasterizer.h"
 
-#include <gdal_priv.h>
-#include "gdal_utils.h"
 
 namespace LxGeo
 {

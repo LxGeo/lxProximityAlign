@@ -1,6 +1,4 @@
 #include "alignment_basic_optim.h"
-#include "polygon_decompoe_utils.h"
-#include "proximity_triplet.h"
 
 namespace LxGeo
 {

@@ -1,6 +1,12 @@
 #pragma once
 #include "defs.h"
 #include "io_shapefile.h"
+#include <gdal_alg.h>
+#include "io_raster.h"
+#include "gdal_algs/rasterizer.h"
+#include "gdal_algs/proximity_transformer.h"
+#include "parameters.h"
+#include "geometry_lab.h"
 
 namespace LxGeo
 {

@@ -1,15 +1,5 @@
 #include "alignment_neighbour_proximity_aware.h"
 
-#include "defs.h"
-#include "parameters.h"
-#include "io_shapefile.h"
-#include "alignment_neighbour_optim.h"
-#include "polygon_decompoe_utils.h"
-#include "proximity_triplet.h"
-#include "affine_geometry/affine_transformer.h"
-#include "graph_weights/spatial_weights.h"
-#include "relationships/composition_struct.h"
-
 namespace LxGeo
 {
 
