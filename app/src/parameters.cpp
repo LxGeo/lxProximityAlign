@@ -53,7 +53,7 @@ namespace LxGeo
 			overwrite_output = false;
 			keep_geometries = false;
 			max_disparity = 150;
-			neighbour_distance_band_values = { 0, 10, 20, 40 };
+			neighbour_distance_band_values = { 0, 1, 10, 20, 40, 100 };
 
 		}
 

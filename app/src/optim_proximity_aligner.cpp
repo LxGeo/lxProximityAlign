@@ -102,11 +102,35 @@ namespace LxGeo
 			/*A function used in the optimizer to measure how well a geometry is aligned returning a value varying between 0-1 where 0 is not aligned and 1 is perfectly aligned
 			*/
 			
-			auto fitness_from_stats_functor = [](numcpp::DetailedStats<float>& stats)->float {
-				double alpha = 0.4;
-				double objective = alpha * stats.mean() + (1.0 - alpha) * stats.variance();
-				double final_objective = (stats.empty()) ? 1e3 : objective;
-				return objective;
+			auto fitness_from_stats_functor = [this](numcpp::DetailedStats<float>& stats)->float {
+				if (stats.empty())
+					return 1e3;
+
+				auto sigmoid = [](const double& value, double offset = 0.0, double scale = 1.0, double exp_scale = 1.0) {return scale / (1.0 + std::exp(-exp_scale * value)) + offset; };
+
+				const double TH = 3.0;
+				auto countSubsequencesSum = [&TH](const std::vector<float>& values) {
+					int count = 0;
+					int subsequenceLength = 0;
+					for (const auto& value : values) {
+						if (value<TH) {
+							++subsequenceLength;
+						}
+						else {
+							count += (subsequenceLength > 1) ? subsequenceLength : 0;
+							subsequenceLength = 0;
+						}
+					}
+					count += (subsequenceLength > 1) ? subsequenceLength : 0;
+					return count;
+				};
+
+				double alpha = 0.6, beta = 0.2, gamma = 0.2;
+				auto& values_container = stats.values_vector();
+				int under_th_count = countSubsequencesSum(values_container);
+				double under_th_ratio = double(under_th_count) / values_container.size();
+				double w_objective = alpha * sigmoid(stats.mean(), -1.0, 2.0, 0.1) + beta * (1 - under_th_ratio) + gamma * sigmoid(stats.stdev(), -1.0, 2.0, 0.1);
+				return w_objective / (alpha+beta+gamma);
 			};
 			
 			std::string DISP_COLUMN_NAME = "DISP";
