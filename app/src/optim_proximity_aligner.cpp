@@ -104,7 +104,7 @@ namespace LxGeo
 			
 			auto fitness_from_stats_functor = [this](numcpp::DetailedStats<float>& stats)->float {
 				if (stats.empty())
-					return 1e3;
+					return 1;
 
 				auto sigmoid = [](const double& value, double offset = 0.0, double scale = 1.0, double exp_scale = 1.0) {return scale / (1.0 + std::exp(-exp_scale * value)) + offset; };
 
@@ -135,14 +135,16 @@ namespace LxGeo
 			
 			std::string DISP_COLUMN_NAME = "DISP";
 
-			nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, xy_cst, fitness_from_stats_functor, MAX_DISP, DISP_COLUMN_NAME);
+			//nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, xy_cst, fitness_from_stats_functor, MAX_DISP, DISP_COLUMN_NAME);
+			std::pair<std::string, std::string> disp_column_names = { "DISP_X", "DISP_Y" };
+			nm_proximity_align(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
 			// Assign confidence and displacement			
 			
 			for (auto& c_gwa : in_gvector.geometries_container) {
 
-				double disp_value = c_gwa.get_double_attribute(DISP_COLUMN_NAME);
-				double ddx = disp_value * xy_cst.first;
-				double ddy = disp_value * xy_cst.second;
+				//double disp_value = c_gwa.get_double_attribute(DISP_COLUMN_NAME);
+				double ddx = c_gwa.get_double_attribute(disp_column_names.first); //disp_value * xy_cst.first;
+				double ddy = c_gwa.get_double_attribute(disp_column_names.second); //disp_value * xy_cst.second;
 				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
 				auto translated_geom = translate_geometry(c_gwa.get_definition(), trans_obj);
 
@@ -161,8 +163,8 @@ namespace LxGeo
 				c_gwa.set_double_attribute("coeff_var", stats.coeff_var());
 				c_gwa.set_double_attribute("stdev", stats.stdev());
 				c_gwa.set_double_attribute("mean", stats.mean());
-				c_gwa.set_double_attribute("max", stats.max());
-				c_gwa.set_double_attribute("min", stats.min());
+				c_gwa.set_double_attribute("max", (!stats.empty()) ? stats.max(): DBL_MAX);
+				c_gwa.set_double_attribute("min", (!stats.empty()) ? stats.min(): DBL_MAX);
 				c_gwa.set_double_attribute("vola1", volatility);
 			}
 
