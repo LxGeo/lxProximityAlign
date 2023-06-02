@@ -8,11 +8,20 @@ namespace LxGeo
 		void nm_proximity_align(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_Polygon_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
 			std::pair<std::string, std::string> OBJECTIVE_FIELD_NAME_PAIR) {
 
-			std::vector<double> neighbour_distance_band_values = {0.01, 1, 5, 10, 20};//numcpp::linspace(0.0, 10, 9);
+			std::string FITT_COLUMN_NAME = "FITT";
+
+			for (auto& c_gwa : input_geovector.geometries_container) {
+				c_gwa.set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.first, 0);
+				c_gwa.set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.second, 0);
+				c_gwa.set_double_attribute(FITT_COLUMN_NAME, 1);
+			}
 			SpatialWeights<Boost_Polygon_2> PSW = SpatialWeights<Boost_Polygon_2>::from_geovector(input_geovector);
-			WeightsDistanceBandParams wdbp = { 20, false, -1, [](double x)->double { return x; } };
+			WeightsDistanceBandParams wdbp = { neighbour_distance_band_values[neighbour_distance_band_values.size() - 1], false, -1, [](double x)->double { return x; } };
 			PSW.fill_distance_band_graph(wdbp);
 
 			RasterPixelsStitcher RPR(ref_gimg);
@@ -46,7 +55,6 @@ namespace LxGeo
 			};
 
 			
-			double MAX_DISP=params->max_disparity;
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 
 				MAX_DISP /= 2;

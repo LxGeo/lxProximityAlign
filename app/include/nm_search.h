@@ -26,6 +26,9 @@ namespace LxGeo
 
 		void nm_proximity_align(std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_Polygon_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
 			std::pair<std::string, std::string> OBJECTIVE_FIELD_NAME_PAIR = {"DISPARIT_X", "DISPARIT_Y"});
 
 		void nm_proximity_align_1d(
