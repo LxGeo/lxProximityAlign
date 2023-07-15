@@ -114,7 +114,7 @@ namespace LxGeo
 						return cached_objective({vals_inp(0), vals_inp(1)});
 					};
 					
-
+					major_vector = { previous_step_disp_x_value, previous_step_disp_y_value };
 					//bool success = optim::nm(optimal_displacement, optim_adapted_objective_fn, &respective_polygons, c_settings);
 					std::function<double(ND::PT)> ND_adaptetd_f = [&cached_objective, &major_vector, &MAX_DISP](ND::PT pt) {
 
@@ -142,7 +142,7 @@ namespace LxGeo
 						double same_direction_factor = 1.0 - abs(cosine_similarity(pt, major_vector));
 						double fitness_factor = cached_objective({ pt[0], pt[1] });
 
-						double a = 0.3, b = 0.8, c = 0.01;
+						double a = 0.5, b = 0.5, c = 0.01;
 						return (a * fitness_factor* fitness_factor + b * same_direction_factor * displacement_factor + c * displacement_factor) / (a + b + c);
 					};
 
@@ -200,18 +200,18 @@ namespace LxGeo
 					};
 					
 					auto PSO_adapted_optimizer = [&MAX_DISP, &previous_step_disp_xy](std::function<double(ND::PT)>& f, ND::PT left, ND::PT right, double tol, int iter) {
-						return ND::psoOptimization(f, 10, 2, left, right, 10);
+						return ND::psoOptimization(f, 5, 2, left, right, 10);
 					};
 
 					optim::algo_settings_t c_settings;
-					c_settings.iter_max = 200;
+					c_settings.iter_max = 100;
 					//c_settings.rel_objfn_change_tol = 5;
 					c_settings.vals_bound = true; c_settings.lower_bounds = -MAX_DISP * Eigen::VectorXd::Ones(2) + previous_step_disp_xy; c_settings.upper_bounds = MAX_DISP * Eigen::VectorXd::Ones(2) + previous_step_disp_xy;
 
 					auto optimal_displacement_vec = ND::custom_splitting_search_nd(ND_adaptetd_f, PSO_adapted_optimizer,
 						{ c_settings.lower_bounds(0), c_settings.lower_bounds(1) },
 						{ c_settings.upper_bounds(0), c_settings.upper_bounds(1) },
-						0.01, 200, 10
+						0.01, c_settings.iter_max, 4
 					);
 					optimal_displacement << optimal_displacement_vec[0], optimal_displacement_vec[1];
 
@@ -219,16 +219,16 @@ namespace LxGeo
 					double previous_optimal_fitness = cached_objective({ previous_step_disp_xy(0), previous_step_disp_xy(1) });
 
 					//update major_vector
-					if(true)//major_vector[0]==0.0 && major_vector[1]==0.0)
-					{
-						double vec_x = (1 - optimal_fitness) * respective_polygons.size() * optimal_displacement_vec[0];
-						double vec_y = (1 - optimal_fitness) * respective_polygons.size() * optimal_displacement_vec[1];
-						double magnitude = sqrt(vec_x * vec_x + vec_y * vec_y);
-						if (magnitude != 0 && magnitude== magnitude) {
-							major_vector[0]+= vec_x / magnitude; major_vector[1] += vec_y / magnitude;
+					//update only in first iteration
+					/*
+					if (distance_val_iter == neighbour_distance_band_values.rbegin()) {
+						double magnitude = sqrt(optimal_displacement_vec[0] * optimal_displacement_vec[0] + optimal_displacement_vec[1] * optimal_displacement_vec[1]);
+						if (magnitude != 0 && magnitude == magnitude) {
+							major_vector[0] += (1 - optimal_fitness) * optimal_displacement_vec[0] / magnitude;
+							major_vector[1] += (1 - optimal_fitness) * optimal_displacement_vec[1] / magnitude;
 						}
 					}
-					std::cout << "major_vector: " << major_vector[0] << ", " << major_vector[1] << std::endl;
+					*/
 
 					// ignore single geometry alignment if optimal_fitness is over a threshhold
 					double single_geom_fitt_threshhold = 0.1;
@@ -255,9 +255,9 @@ namespace LxGeo
 						auto stitched_pixels = RPR.readPolygonPixels<float>(translated_geometry, RasterPixelsStitcherStartegy::contours);
 						auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
 						double c_polygon_fitness = fitness_from_stats_functor(stats);
-						double c_polygon_previous_fitness = c_poly_ptr->get_double_attribute(FITT_COLUMN_NAME);
 						double c_polygon_previous_disparity_x = c_poly_ptr->get_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.first);
 						double c_polygon_previous_disparity_y = c_poly_ptr->get_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.second);
+						double c_polygon_previous_fitness = c_poly_ptr->get_double_attribute(FITT_COLUMN_NAME);
 
 						bool alignment_success = c_polygon_fitness < c_polygon_previous_fitness;
 
@@ -280,8 +280,9 @@ namespace LxGeo
 						saved_gwa->set_double_attribute("ind_obj", (alignment_success) ? c_polygon_fitness : c_polygon_previous_fitness);
 
 						// updating fields
-						c_poly_ptr->set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.first, optimal_displacement(0));
-						c_poly_ptr->set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.second, optimal_displacement(1));
+						c_poly_ptr->set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.first, (alignment_success) ? ddx : c_polygon_previous_disparity_x);
+						c_poly_ptr->set_double_attribute(OBJECTIVE_FIELD_NAME_PAIR.second, (alignment_success) ? ddy : c_polygon_previous_disparity_y);
+						c_poly_ptr->set_double_attribute(FITT_COLUMN_NAME, (alignment_success) ? c_polygon_fitness : c_polygon_previous_fitness);
 					}
 
 				}
