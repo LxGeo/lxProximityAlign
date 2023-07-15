@@ -370,18 +370,12 @@ namespace LxGeo
 					for (auto poly_idx : components_polygons_map[comp_idx]) {
 						respective_polygons.push_back(&input_geovector.geometries_container[poly_idx]);
 					}
-					Arrangement respective_polygons_arrangment = ArrangmentFromPolygons(respective_polygons);
-					
-					// Extract component exterior edges using arrangment
 					std::list<Boost_LineString_2> component_exterior_edges;
-					
-					/*for (auto eit = respective_polygons_arrangment.edges_begin(); eit != respective_polygons_arrangment.edges_end(); ++eit) {
-						auto& src = eit->curve().source();
-						auto& tar = eit->curve().target();
-						auto c_segment = Boost_LineString_2({ { CGAL::to_double(src.x()), CGAL::to_double(src.y()) }, { CGAL::to_double(tar.x()), CGAL::to_double(tar.y()) } });
-						component_exterior_edges.push_back(c_segment);
-					};*/
-					
+
+					/*
+					// Extract component exterior edges using arrangment
+					Arrangement respective_polygons_arrangment = ArrangmentFromPolygons(respective_polygons);
+										
 					for (auto eit = respective_polygons_arrangment.halfedges_begin(); eit != respective_polygons_arrangment.halfedges_end(); ++eit) {
 						// ignore if edge is shared
 						if (!eit->twin()->face()->is_unbounded())
@@ -392,7 +386,15 @@ namespace LxGeo
 							Boost_LineString_2({ { CGAL::to_double(src.x()), CGAL::to_double(src.y()) }, { CGAL::to_double(tar.x()), CGAL::to_double(tar.y()) } })
 						);
 					};
-					
+					*/
+					for (auto& c_poly : respective_polygons) {
+						auto& c_geom = c_poly->get_definition();
+						for (int edge_idx = 0; edge_idx < c_geom.outer().size() - 1; edge_idx++) {
+							component_exterior_edges.push_back(
+								Boost_LineString_2({ c_geom.outer().at(edge_idx), c_geom.outer().at(edge_idx+1)  })
+							);
+						}
+					}
 
 					std::function<double(double)> bound_objective = [&RPR, &r2r_constants, &null_value, &linestring_fitness_evaluator, &component_exterior_edges](double c_component_height)->double {
 						double total_fitness = 0;
