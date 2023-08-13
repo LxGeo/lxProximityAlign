@@ -41,5 +41,13 @@ namespace LxGeo
 			std::string DISP_COLUMN_NAME = "DISP"
 		);
 
+		void nm_proximity_align_linear(
+			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
+			GeoVector<Boost_LineString_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
+			std::pair<std::string, std::string> OBJECTIVE_FIELD_NAME_PAIR);
+
 	}
 }

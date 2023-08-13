@@ -1,4 +1,5 @@
 #include "nm_search.h"
+#include "boost/multi_array.hpp"
 
 namespace LxGeo
 {
@@ -345,8 +346,8 @@ namespace LxGeo
 				std::map<size_t, std::list<size_t>> components_polygons_map;
 				for (size_t _idx = 0; _idx < PSW.component_labels.size(); ++_idx) {
 					double c_fitness_value = input_geovector.geometries_container[_idx].get_double_attribute(FITT_COLUMN_NAME);
-					if (c_fitness_value < FITNESS_THRESH)
-						continue;
+					//if (c_fitness_value < FITNESS_THRESH)
+					//	continue;
 
 					size_t comp_id = PSW.component_labels[_idx];
 					if (components_polygons_map.find(comp_id) != components_polygons_map.end())
@@ -480,6 +481,194 @@ namespace LxGeo
 				std::string comp_file = params->temp_dir + "//comp_" + std::to_string(*distance_val_iter) + ".shp";				
 				component_gvector.to_file(comp_file);
 			}
+		}
+
+
+		void nm_proximity_align_linear(
+			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
+			GeoVector<Boost_LineString_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
+			std::pair<std::string, std::string> OBJECTIVE_FIELD_NAME_PAIR) {
+
+
+			SpatialWeights<Boost_LineString_2> PSW = SpatialWeights<Boost_LineString_2>::from_geovector(input_geovector);
+			WeightsDistanceBandParams wdbp = { neighbour_distance_band_values[neighbour_distance_band_values.size() - 1], false, -1, [](double x)->double { return x; } };
+			PSW.fill_distance_band_graph(wdbp);
+
+			RasterPixelsStitcher RPR(ref_gimg);
+			float null_value = ref_gimg.no_data.value_or(FLT_MAX);
+
+			/*****
+			*Lambda function used to return the fitness of a geometry within the proximity map
+			*****/
+			auto linestring_fitness_evaluator = [&RPR, &null_value, &fitness_from_stats_functor](const Boost_LineString_2& ref_geometry)->double {
+				auto stitched_pixels = RPR.readLineStringPixels<float>(ref_geometry, RasterPixelsStitcherStartegy::contours);
+				// Measure detailed stats
+				auto stats = numcpp::DetailedStats<float>(stitched_pixels, null_value, 0.0);
+				return fitness_from_stats_functor(stats);
+			};
+
+			auto linestring2seg_unpooling_fn = [](const Geometries_with_attributes<Boost_LineString_2>& parent_linestring) -> std::list<Geometries_with_attributes<Boost_LineString_2>> {
+				std::list<Geometries_with_attributes<Boost_LineString_2>> unpooled_linestrings;
+
+				auto& c_linestring = parent_linestring.get_definition();
+				auto c_line_vertex_it = c_linestring.begin();
+				auto prev = c_line_vertex_it;
+				int child_position = 0;
+				for (++c_line_vertex_it; c_line_vertex_it != c_linestring.end(); ++c_line_vertex_it, ++child_position) {
+					Boost_LineString_2 c_segment;
+					c_segment.push_back(*prev);
+					c_segment.push_back(*c_line_vertex_it);
+					Geometries_with_attributes<Boost_LineString_2> c_gwa(c_segment);
+					c_gwa.set_int_attribute("pid", parent_linestring.get_int_attribute(GeoVector<Boost_LineString_2>::ID_FIELD_NAME));
+					c_gwa.set_int_attribute("pos", child_position);
+					unpooled_linestrings.push_back(c_gwa);
+					prev = c_line_vertex_it;
+				}
+				return unpooled_linestrings;
+			};
+
+			GeoVector<Boost_LineString_2> unpooled_linestring_gvec; unpool_geovector<Boost_LineString_2, Boost_LineString_2>(input_geovector, unpooled_linestring_gvec, linestring2seg_unpooling_fn);
+
+			std::function<LinearTopology<EK>::SegmentIdentification(const Geometries_with_attributes<Boost_LineString_2>&)> gwa2segId_fn =
+				[](const Geometries_with_attributes<Boost_LineString_2>& gwa) ->LinearTopology<EK>::SegmentIdentification {
+				LinearTopology<EK>::SegmentIdentification seg_id; seg_id.parent_id = gwa.get_int_attribute("pid"); seg_id.position = gwa.get_int_attribute("pos");
+				return seg_id;
+			};
+			LinearTopology<EK>::Arrangement_2 arr = LinearTopology<EK>::arrangmentFromLineStringGeovector(unpooled_linestring_gvec, gwa2segId_fn);
+			// Defining datastructures
+			std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double>> displacement_map;
+			for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
+				displacement_map[v_handle] = { 0,0 };
+			}
+
+			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
+				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
+				PSW.disconnect_edges(disconnection_lambda);
+				PSW.run_labeling();
+				std::cout << "Aligning N components: " << PSW.n_components << std::endl;
+
+				std::map<size_t, std::unordered_set<size_t>> components_geometries_map;
+				std::map<size_t, Eigen::VectorXd> components_transforms_map;
+				for (size_t _idx = 0; _idx < PSW.component_labels.size(); ++_idx) {
+					size_t comp_id = PSW.component_labels[_idx];
+					int geom_id = PSW.geometries_container[_idx].get_int_attribute(GeoVector<Boost_LineString_2>::ID_FIELD_NAME);
+					if (components_geometries_map.find(comp_id) != components_geometries_map.end())
+						components_geometries_map[comp_id].insert(geom_id);
+					else
+					{
+						components_geometries_map[comp_id] = std::unordered_set<size_t>();
+						components_geometries_map[comp_id].insert(geom_id);
+					}
+				}
+
+				std::unordered_map<size_t, std::set<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator>> components_verices_map;
+				// Fill cluster vertices map with verices correpsonding to each component
+				for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
+					LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
+					circ_first = circ_current = v_handle->incident_halfedges();
+					do {
+						auto pid = circ_current->curve().data().front().parent_id;
+						for (auto& [component_id, respective_geometries_set] : components_geometries_map) {
+							if (respective_geometries_set.find(pid) != respective_geometries_set.end()) {
+								components_verices_map[component_id].insert(v_handle);
+							}
+						}
+					}
+					while (++circ_current != circ_first);
+				}
+
+				for (const auto& [cluster_id, respective_vertices_handles] : components_verices_map) {
+
+					std::function<double(const std::pair<double, double>&)> bound_objective = [&](const std::pair<double, double>& disp) ->double {
+						std::function<bool(LinearTopology<EK>::Arrangement_2::Vertex_const_iterator)> filter_predicate = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {
+							return respective_vertices_handles.find(viter) != respective_vertices_handles.end();
+						};
+						// TODO apply only on respective 
+						for (auto& c_v_handle : respective_vertices_handles)
+							displacement_map[c_v_handle] = disp;
+						auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, displacement_map);
+
+						double total_fitness = 0.0, total_length = 0.0;
+						for (auto& c_gwa : filtered_gvec) {
+							double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa.get_definition());
+							double c_edge_length = bg::length(c_gwa.get_definition());
+							total_fitness += (c_geometry_obj_val * c_edge_length);
+							total_length += c_edge_length;
+						}
+						double mean_fitness = total_fitness / total_length;
+						return mean_fitness;
+					};
+
+					auto ND_adpated_optimizer = [&MAX_DISP](std::function<double(const std::pair<double, double>&)>& f, ND::PT left, ND::PT right, double tol, int iter)->ND::PT {
+						optim::algo_settings_t c_settings;
+						c_settings.iter_max = iter;
+						//c_settings.rel_sol_change_tol = 0.1;
+						c_settings.vals_bound = true;
+						c_settings.lower_bounds = Eigen::VectorXd(2); c_settings.lower_bounds << left[0], left[1];
+						c_settings.upper_bounds = Eigen::VectorXd(2); c_settings.upper_bounds << right[0], right[1];
+
+						optim::Mat_t simplex_points(3, 2);
+						simplex_points.row(0) << -5, 10;
+						simplex_points.row(1) << 0, 15;
+						simplex_points.row(2) << -10, -5;
+						c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
+						//c_settings.print_level = 3;
+
+						Eigen::VectorXd c_optimal_displacement(2); c_optimal_displacement << 0.0, 0.0;
+						auto ND_adapted_objective_fn = [&f, &MAX_DISP](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
+							double fitness_factor = f({ vals_inp(0), vals_inp(1) });
+							return fitness_factor;
+						};
+						bool success = optim::nm(c_optimal_displacement, ND_adapted_objective_fn, nullptr, c_settings);
+						if (true)
+							return { c_optimal_displacement(0), c_optimal_displacement(1) };
+						else {
+							std::cout << "failed suboptimization!" << std::endl;
+							return { 0,0 };
+						}
+					};
+
+					auto optimal_displacment = ND_adpated_optimizer(bound_objective, { -20,-20 }, { 20,20 }, 0, 100);
+
+					for (auto& c_v_handle : respective_vertices_handles)
+						displacement_map[c_v_handle] = { optimal_displacment[0], optimal_displacment[1] };
+
+					std::cout << optimal_displacment[0] << " " << optimal_displacment[1] << std::endl;
+
+				}
+			}
+			
+			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, displacement_map);
+			aligned_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_parts.shp");
+
+			std::function<Geometries_with_attributes<Boost_LineString_2>(std::list<Geometries_with_attributes<Boost_LineString_2>>&)> reconstruction_fn = [](std::list<Geometries_with_attributes<Boost_LineString_2>>& geom_parts) ->Geometries_with_attributes<Boost_LineString_2> {
+				geom_parts.sort([](const Geometries_with_attributes<Boost_LineString_2>& a, const Geometries_with_attributes<Boost_LineString_2>& b) { return a.get_double_attribute("pos") < b.get_double_attribute("pos"); });
+				Boost_LineString_2 reconstructed_l; 
+				if (geom_parts.size() == 0) { return Geometries_with_attributes<Boost_LineString_2>(); }
+				if (geom_parts.size() == 1) {
+					return Geometries_with_attributes<Boost_LineString_2>(geom_parts.begin()->get_definition());
+				}
+				auto first_part = geom_parts.begin()->get_definition();
+				auto second_part = std::next(geom_parts.begin())->get_definition();
+				if (bg::distance(first_part.at(0), second_part.at(0))<1e-5 || bg::distance(first_part.at(0), second_part.at(1)) < 1e-5)
+					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(1)); // adding starting point
+				else
+					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(0)); // adding starting point
+				for (const auto& geom_part : geom_parts) {
+					auto point_to_add = (bg::distance(reconstructed_l.back(), geom_part.get_definition().at(0)) < 1e-5) ? geom_part.get_definition().at(1) : geom_part.get_definition().at(0);
+					reconstructed_l.push_back(point_to_add);
+				};
+				Geometries_with_attributes<Boost_LineString_2> gwa_l(reconstructed_l);
+				return gwa_l;
+			};
+
+			GeoVector<Boost_LineString_2> pooled_gvec;
+			pool_geovector(aligned_gvec, pooled_gvec, reconstruction_fn);
+			pooled_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_full.shp");
+
 		}
 
 	}
