@@ -116,5 +116,15 @@ namespace LxGeo
 
         }
 
+		void linestrings2proximity(IO_DATA::LineStringShapfileIO& input_shapefile, std::string& out_proximity_map_path, OGREnvelope* out_extents,
+			double raster_px_size, double raster_py_size, ProximityMapStrategy proximity_strategy) {
+
+			std::string rasterized_out_path = (boost::filesystem::path(params->temp_dir) / "rasterized.tif").string();
+			const char* shapefilePath = input_shapefile.vector_dataset->GetDescription();
+			rasterize_shapefile(rasterized_out_path, std::string(shapefilePath), out_extents, raster_px_size, raster_py_size);
+
+			std::string proximity_out_path = (boost::filesystem::path(params->temp_dir) / "proximity.tif").string();
+			transform_to_proximity(rasterized_out_path, proximity_out_path);
+		}
     }
 }
