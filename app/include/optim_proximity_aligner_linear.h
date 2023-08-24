@@ -6,6 +6,7 @@
 #include "lightweight/geovector.h"
 #include "gdal_algs/polygons_to_proximity_map.h"
 #include "nm_search.h"
+#include "pagmo_problems.h"
 #include "lightweight/geovector.h"
 #include "affine_geometry/affine_transformer.h"
 #include "stitching/vector_on_raster_stitcher.h"

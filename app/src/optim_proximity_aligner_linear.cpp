@@ -93,35 +93,14 @@ namespace LxGeo
 				if (stats.empty())
 					return 1;
 
-				auto sigmoid = [](const double& value, double offset = 0.0, double scale = 1.0, double exp_scale = 1.0) {return scale / (1.0 + std::exp(-exp_scale * value)) + offset; };
-
-				const double TH = 3.0;
-				auto countSubsequencesSum = [&TH](const std::vector<float>& values) {
-					int count = 0;
-					int subsequenceLength = 0;
-					for (const auto& value : values) {
-						if (value<TH) {
-							++subsequenceLength;
-						}
-						else {
-							count += (subsequenceLength > 1) ? subsequenceLength : 0;
-							subsequenceLength = 0;
-						}
-					}
-					count += (subsequenceLength > 1) ? subsequenceLength : 0;
-					return count;
-				};
-
-				double alpha = 0.6, beta = 0.2, gamma = 0.2;
-				auto& values_container = stats.values_vector();
-				int under_th_count = countSubsequencesSum(values_container);
-				double under_th_ratio = double(under_th_count) / values_container.size();
-				double w_objective = alpha * sigmoid(stats.mean(), -1.0, 2.0, 0.1) + beta * (1 - under_th_ratio) + gamma * sigmoid(stats.stdev(), -1.0, 2.0, 0.1);
-				return w_objective / (alpha+beta+gamma);
+				auto sigmoid = [](const double& value, double offset = 0.0, double scale = 1.0, double exp_scale = 1.0) {return scale / (1.0 + std::exp(-exp_scale * value)) + offset; };								
+				double alpha = 0.6, gamma = 0.2;
+				double w_objective = alpha * sigmoid(stats.mean(), -1.0, 2.0, 0.1) + gamma * sigmoid(stats.stdev(), -1.0, 2.0, 0.1);
+				return w_objective / (alpha+gamma);
 			};
 			
 			std::pair<std::string, std::string> disp_column_names = { "DISP_X", "DISP_Y" };
-			nm_proximity_align_linear(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
+			pagmo_proximity_align_linear(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
 			
 			//nm_proximity_align(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
 			// Assign confidence and displacement			
