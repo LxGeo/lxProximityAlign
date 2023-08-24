@@ -68,6 +68,8 @@ else()
   message(STATUS "NOTICE: This exe requires fmt and will not be compiled.")
 endif()
 
+find_package(pagmo CONFIG REQUIRED)
+
 include_directories(include)
 include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/")
 include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/io/")
@@ -82,6 +84,7 @@ set(USED_BOOST_LIBS ${Boost_LOG_SETUP_LIBRARY} ${Boost_LOG_LIBRARY}
 target_link_libraries(${PROJECT_NAME} ${USED_BOOST_LIBS})
 
 target_link_libraries(${PROJECT_NAME} ${GDAL_LIBRARIES} ${OpenCV_LIBS} fmt::fmt fmt::fmt-header-only)
+target_link_libraries(${PROJECT_NAME} Pagmo::pagmo)
 
 target_link_libraries(${PROJECT_NAME} debug ../out/Debug/LxGeoFactoryShared)
 target_link_libraries(${PROJECT_NAME} optimized ../out/Release/LxGeoFactoryShared)
