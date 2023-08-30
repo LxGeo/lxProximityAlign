@@ -81,12 +81,125 @@ namespace LxGeo
 			};
 			LinearTopology<EK>::Arrangement_2 arr = LinearTopology<EK>::arrangmentFromLineStringGeovector(unpooled_linestring_gvec, gwa2segId_fn);
 			// Defining datastructures
-			std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double>> displacement_map;
+			std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::list<std::tuple<double, double, double>>> displacement_map;
+			
+			tqdm bar;
+			int c_estimated_vertex_handle = 0;
 			for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
-				displacement_map[v_handle] = { 0,0 };
+				bar.progress(c_estimated_vertex_handle++, arr.number_of_vertices());
+				size_t N_MAX_LEVEL = 1;
+				auto temp_half_edge = v_handle->incident_halfedges()->source()->incident_halfedges();
+				while (temp_half_edge->source() != v_handle) 
+					++temp_half_edge;
+				std::map<size_t, std::set<LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator>> N_neighbours_edges;
+				N_neighbours_edges[0].insert(temp_half_edge);
+				std::set<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator> all_neighbour_vertices = {v_handle,};
+				std::map<size_t, std::set<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator>> N_neighbours_vertices = { {0, {v_handle,}} };
+				// filling datastructures
+				for (int c_neighbour_level = 1; c_neighbour_level <= N_MAX_LEVEL; c_neighbour_level++) {
+					//for previous level elements
+					for (auto c_prev_neighbour_edge : N_neighbours_edges[c_neighbour_level - 1]) {
+
+						LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
+						circ_first = circ_current = c_prev_neighbour_edge->source()->incident_halfedges();
+						do {
+							bool already_added = all_neighbour_vertices.find(circ_current->source()) != all_neighbour_vertices.end();
+							
+							if (!already_added) {
+								N_neighbours_edges[c_neighbour_level].insert(circ_current);
+								N_neighbours_vertices[c_neighbour_level].insert(circ_current->source());
+								all_neighbour_vertices.insert(circ_current->source());
+							}
+						} while (++circ_current != circ_first);
+					}
+				}
+
+				
+				/*cluster_problem<int>::bound_type objective_boundary = {
+						std::vector<double>(2* all_neighbour_vertices.size(), -MAX_DISP),
+						std::vector<double>(2* all_neighbour_vertices.size(), MAX_DISP)
+				};*/
+				cluster_problem<int>::bound_type objective_boundary;
+				for (auto v_handle : all_neighbour_vertices) {
+					objective_boundary.first.push_back(-MAX_DISP);
+					objective_boundary.first.push_back(-MAX_DISP);
+
+					objective_boundary.second.push_back(MAX_DISP);
+					objective_boundary.second.push_back(MAX_DISP);
+				};
+
+				
+				auto all_neighbour_points = all_neighbour_vertices | std::views::transform([](auto& v_handle) { return v_handle->point(); });
+				
+
+				std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {
+					// disp contain displacement values for each vertex in the following order [ v0_x, v0_y, v1_x, ..., vN_x, vN_y]
+					std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_neighbours_disp_map;
+					size_t c_vertex_idx = 0;
+					for (auto& c_v_handle : all_neighbour_vertices) {
+						c_neighbours_disp_map[c_v_handle] = { disp[0],  disp[1] };
+						c_vertex_idx++;
+					}
+
+					std::list<Boost_LineString_2> transformed_edges;
+					
+					for (const auto& [c_level, c_neighbours_edges_at_level] : N_neighbours_edges) {
+						for (auto& c_edge_handle : c_neighbours_edges_at_level) {
+							auto source_point = c_edge_handle->source();
+							auto target_point = c_edge_handle->target();
+							Boost_LineString_2 transformed_edge = {
+								{ PointTraits<Point_2>::getX(source_point->point()) + c_neighbours_disp_map[source_point].first, PointTraits<Point_2>::getY(source_point->point()) + c_neighbours_disp_map[source_point].second },
+								{ PointTraits<Point_2>::getX(target_point->point()) + c_neighbours_disp_map[target_point].first, PointTraits<Point_2>::getY(target_point->point()) + c_neighbours_disp_map[target_point].second },
+							};
+							transformed_edges.push_back(transformed_edge);
+						}
+					}
+
+					double total_fitness = 0.0, total_length = 0.0;
+					for (auto& c_gwa : transformed_edges) {
+						double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa);
+						double c_edge_length = bg::length(c_gwa);
+						total_fitness += (c_geometry_obj_val * c_edge_length);
+						total_length += c_edge_length;
+					}
+					double mean_fitness = total_fitness / total_length;
+					return mean_fitness;
+				};
+
+				pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
+				pagmo::population pop{ problem, 5 };
+				pop.set_x(0, std::vector<double>(objective_boundary.first.size(), 0.0));
+
+				//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
+				pagmo::algorithm algo{pagmo::pso{20}};
+				pop = algo.evolve(pop);
+				std::vector<double> best_value = pop.champion_f();
+				std::vector<double> best_arg = pop.champion_x();
+
+				size_t c_vertex_idx = 0;
+				for (const auto& [level_idx, level_neighbours] : N_neighbours_vertices) {
+					for (auto& c_v_handle : level_neighbours) {
+						displacement_map[c_v_handle].push_back({ best_arg[0], best_arg[1], double(level_idx) / best_value[0] });
+					}
+				}
+
 			}
 
+			bar.finish();
+			std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double>> agg_displacement_map;
+			for (const auto& [k, v] : displacement_map) {
+				double x_sum = 0, y_sum = 0, z_sum = 0;
+				for (auto& el : v) {
+					double x, y, z;
+					std::tie(x, y, z) = el;
+					x_sum += x*z;
+					y_sum += y*z;
+					z_sum += z;
+				}
+				agg_displacement_map[k] = { x_sum / z_sum, y_sum / z_sum };
+			}
 
+			/*
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
 				PSW.disconnect_edges(disconnection_lambda);
@@ -202,9 +315,10 @@ namespace LxGeo
 				}
 				pts_gvec.to_file(params->temp_dir + "/_" + std::to_string(*distance_val_iter) + "vertices_disp.shp");
 
-			}
+			}*/
 			
-			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, displacement_map);
+			
+			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, agg_displacement_map);
 			//aligned_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_parts.shp");
 
 			GeoVector<Boost_LineString_2> pooled_gvec;
