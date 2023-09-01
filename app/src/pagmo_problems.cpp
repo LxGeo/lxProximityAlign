@@ -261,7 +261,7 @@ namespace LxGeo
 				pop.set_x(0, std::vector<double>(objective_boundary.first.size(), 0.0));
 
 				//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
-				pagmo::algorithm algo{pagmo::pso{20}};
+				pagmo::algorithm algo{pagmo::pso{50}};
 				pop = algo.evolve(pop);
 				std::vector<double> best_value = pop.champion_f();
 				std::vector<double> best_arg = pop.champion_x();
