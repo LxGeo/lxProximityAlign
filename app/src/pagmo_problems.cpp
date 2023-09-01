@@ -207,6 +207,8 @@ namespace LxGeo
 
 				
 				auto all_neighbour_points = all_neighbour_vertices | std::views::transform([](auto& v_handle) { return v_handle->point(); });
+				auto original_diff = computePairwiseDifference(all_neighbour_points);
+				
 				std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {					
 					double tx = disp[0] / MAX_ROT_DEGREES * MAX_DISP, ty = disp[1] / MAX_ROT_DEGREES * MAX_DISP;
 					// disp contain displacement values for each vertex in the following order [ v0_x, v0_y, v1_x, ..., vN_x, vN_y]
@@ -225,6 +227,9 @@ namespace LxGeo
 						}						
 					}
 
+					auto all_transformed_neighbour_points = all_neighbour_vertices | std::views::transform([&](auto& v_handle) { return v_handle->point() + Vector_2(c_neighbours_disp_map[v_handle].first, c_neighbours_disp_map[v_handle].second) ; });
+					auto transformed_diff = computePairwiseDifference(all_neighbour_points);
+					double coherency_error = (transformed_diff - original_diff).array().abs().mean();
 
 					std::list<Boost_LineString_2> transformed_edges;
 					
@@ -248,7 +253,7 @@ namespace LxGeo
 						total_length += c_edge_length;
 					}
 					double mean_fitness = total_fitness / total_length;
-					return mean_fitness;
+					return mean_fitness + coherency_error;
 				};
 
 				pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
