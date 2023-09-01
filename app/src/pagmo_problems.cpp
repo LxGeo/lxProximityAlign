@@ -304,6 +304,19 @@ namespace LxGeo
 				agg_displacement_map[k] = { x_sum / z_sum, y_sum / z_sum };
 			}
 
+			GeoVector<Boost_Point_2> pts_gvec;
+			for (const auto& [k, v] : displacement_map) {
+				auto b_p = transform_C2B_Point(k->point());
+				pts_gvec.add_geometry(b_p);
+				auto c_gwa = pts_gvec.geometries_container.rbegin();
+				double x, y, z;
+				std::tie(x, y, z) = *v.begin();
+				c_gwa->set_double_attribute("x_", x);
+				c_gwa->set_double_attribute("y_", y);
+				c_gwa->set_double_attribute("z_", z);
+			}
+			pts_gvec.to_file(params->temp_dir + "/pts_d.shp");
+
 			/*
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
