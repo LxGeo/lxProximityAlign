@@ -201,26 +201,30 @@ namespace LxGeo
 						std::vector<double>(2* all_neighbour_vertices.size(), MAX_DISP)
 				};*/
 				cluster_problem<int>::bound_type objective_boundary;
-				for (auto v_handle : all_neighbour_vertices) {
-					objective_boundary.first.push_back(-MAX_DISP);
-					objective_boundary.first.push_back(-MAX_DISP);
-
-					objective_boundary.second.push_back(MAX_DISP);
-					objective_boundary.second.push_back(MAX_DISP);
-				};
+				double MAX_ROT_DEGREES = 10.0;
+				objective_boundary.first = std::vector<double>(all_neighbour_vertices.size() + 1 ,-MAX_ROT_DEGREES);
+				objective_boundary.second = std::vector<double>(all_neighbour_vertices.size() + 1, MAX_ROT_DEGREES);
 
 				
 				auto all_neighbour_points = all_neighbour_vertices | std::views::transform([](auto& v_handle) { return v_handle->point(); });
-				
-
-				std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {
+				std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {					
+					double tx = disp[0] / MAX_ROT_DEGREES * MAX_DISP, ty = disp[1] / MAX_ROT_DEGREES * MAX_DISP;
 					// disp contain displacement values for each vertex in the following order [ v0_x, v0_y, v1_x, ..., vN_x, vN_y]
 					std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_neighbours_disp_map;
 					size_t c_vertex_idx = 0;
+					Point_2 displaced_center = v_handle->point() + Vector_2(tx, ty);
 					for (auto& c_v_handle : all_neighbour_vertices) {
-						c_neighbours_disp_map[c_v_handle] = { disp[0],  disp[1] };
-						c_vertex_idx++;
+						if (c_v_handle == v_handle) {
+							c_neighbours_disp_map[c_v_handle] = { tx,  ty };
+						}
+						else {
+							Point_2 new_b_position = rotate_around_point(displaced_center, c_v_handle->point() + Vector_2(tx, ty), disp[2 + c_vertex_idx]);
+							auto diff_combined_transfrom = new_b_position - c_v_handle->point();							
+							c_neighbours_disp_map[c_v_handle] = { CGAL::to_double(diff_combined_transfrom.x()), CGAL::to_double(diff_combined_transfrom.y()) };
+							c_vertex_idx++;
+						}						
 					}
+
 
 					std::list<Boost_LineString_2> transformed_edges;
 					
@@ -258,9 +262,24 @@ namespace LxGeo
 				std::vector<double> best_arg = pop.champion_x();
 
 				size_t c_vertex_idx = 0;
-				for (const auto& [level_idx, level_neighbours] : N_neighbours_vertices) {
-					for (auto& c_v_handle : level_neighbours) {
-						displacement_map[c_v_handle].push_back({ best_arg[0], best_arg[1], double(level_idx) / best_value[0] });
+				double tx = best_arg[0] / MAX_ROT_DEGREES * MAX_DISP, ty = best_arg[1] / MAX_ROT_DEGREES * MAX_DISP;
+				Point_2 displaced_center = v_handle->point() + Vector_2(tx, ty);
+				for (auto& c_v_handle : all_neighbour_vertices) {
+					if (c_v_handle == v_handle) {
+						if  (best_value[0]<0.9)
+							displacement_map[c_v_handle].push_back({ tx, ty, 1.0 / (0.0001+best_value[0]) });
+						//else
+						//	displacement_map[c_v_handle].push_back({ 0, 0, 1.0 });
+					}
+					else {
+						if (best_value[0] < 0.9) {
+							Point_2 new_b_position = rotate_around_point(displaced_center, c_v_handle->point() + Vector_2(tx, ty), best_arg[2 + c_vertex_idx]);
+							auto diff_combined_transfrom = new_b_position - c_v_handle->point();
+							//displacement_map[c_v_handle].push_back({ CGAL::to_double(diff_combined_transfrom.x()), CGAL::to_double(diff_combined_transfrom.y()), 1.0 / (0.0001 + best_value[0]) });
+						}
+						//else
+						//	displacement_map[c_v_handle].push_back({ 0,0,1.0 });
+						c_vertex_idx++;
 					}
 				}
 
