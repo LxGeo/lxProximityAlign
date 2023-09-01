@@ -180,16 +180,20 @@ namespace LxGeo
 						LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
 						circ_first = circ_current = c_prev_neighbour_edge->source()->incident_halfedges();
 						do {
-							bool already_added = all_neighbour_vertices.find(circ_current->source()) != all_neighbour_vertices.end();
+							bool s_already_added = all_neighbour_vertices.find(circ_current->source()) != all_neighbour_vertices.end();
+							bool t_already_added = all_neighbour_vertices.find(circ_current->target()) != all_neighbour_vertices.end();
+							bool already_added = s_already_added && t_already_added;
 							
 							if (!already_added) {
 								N_neighbours_edges[c_neighbour_level].insert(circ_current);
 								N_neighbours_vertices[c_neighbour_level].insert(circ_current->source());
 								all_neighbour_vertices.insert(circ_current->source());
+								all_neighbour_vertices.insert(circ_current->target());
 							}
 						} while (++circ_current != circ_first);
 					}
 				}
+				N_neighbours_edges[0].clear();
 
 				
 				/*cluster_problem<int>::bound_type objective_boundary = {
