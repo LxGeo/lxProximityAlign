@@ -5,6 +5,83 @@ namespace LxGeo
 	namespace lxProximityAlign
 	{
 
+		template <typename range>
+		Eigen::MatrixXd computePairwiseDistance(const range& points) {
+			int N = points.size();
+
+			// Convert the set of points to an Eigen matrix
+			Eigen::MatrixXd data(N, 2);
+			size_t idx = 0;
+			for (const auto& p : points) {
+				data(idx, 0) = PointTraits<std::ranges::range_value_t<range>>::getX(p);
+				data(idx, 1) = PointTraits<std::ranges::range_value_t<range>>::getY(p);
+				idx++;
+			}
+
+			// Compute squared norms for each row in data
+			Eigen::VectorXd squaredNorms = data.rowwise().squaredNorm();
+
+			// Use broadcasting to compute the pairwise squared distances
+			Eigen::MatrixXd pairwiseSquaredDistances = squaredNorms.rowwise().replicate(data.rows())
+				+ squaredNorms.transpose().colwise().replicate(data.rows())
+				- 2 * data * data.transpose();
+
+			// Ensure no negative values due to numerical inaccuracies
+			pairwiseSquaredDistances = pairwiseSquaredDistances.cwiseMax(0.0);
+
+			// Compute the actual distances
+			Eigen::MatrixXd distances = pairwiseSquaredDistances.array().sqrt();
+			return distances;
+		}
+
+		template <typename range>
+		Eigen::MatrixXd computePairwiseDifference(const range& points) {
+			int N = points.size();
+
+			// Convert the set of points to an Eigen matrix
+			Eigen::MatrixXd data(N, 2);
+			size_t idx = 0;
+			for (const auto& p : points) {
+				data(idx, 0) = PointTraits<std::ranges::range_value_t<range>>::getX(p);
+				data(idx, 1) = PointTraits<std::ranges::range_value_t<range>>::getY(p);
+				idx++;
+			}
+
+			// Create a 3D tensor to store pairwise differences
+			// For simplicity, we'll use a MatrixXd and reshape it later
+			Eigen::MatrixXd pairwiseDifferences(N * N, 2);
+
+			for (int i = 0; i < N; ++i) {
+				for (int j = 0; j < N; ++j) {
+					pairwiseDifferences.row(i * N + j) = data.row(i) - data.row(j);
+				}
+			}
+
+			return pairwiseDifferences;
+		}
+
+		Point_2 rotate_around_point(const Point_2& A, const Point_2& B, double angle_in_degrees) {
+			// Convert angle to radians
+			double angle_in_radians = angle_in_degrees * CGAL_PI / 180.0;
+
+			auto cos_angle = std::cos(angle_in_radians);
+			auto sin_angle = std::sin(angle_in_radians);
+
+			// Translate B so that A becomes the origin
+			auto x_translated = B.x() - A.x();
+			auto y_translated = B.y() - A.y();
+
+			// Rotate around the origin
+			auto x_rotated = x_translated * cos_angle - y_translated * sin_angle;
+			auto y_rotated = x_translated * sin_angle + y_translated * cos_angle;
+
+			// Translate back
+			auto x_final = x_rotated + A.x();
+			auto y_final = y_rotated + A.y();
+
+			return Point_2(x_final, y_final);
+		}
+
 		void pagmo_proximity_align_linear(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_LineString_2>& input_geovector,
