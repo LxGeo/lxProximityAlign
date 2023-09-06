@@ -178,6 +178,101 @@ namespace LxGeo
 				return seg_id;
 			};
 			LinearTopology<EK>::Arrangement_2 arr = LinearTopology<EK>::arrangmentFromLineStringGeovector(unpooled_linestring_gvec, gwa2segId_fn);
+
+
+			//////////// Estimating component displacement
+			DefaultUnorderedMap<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double>> finest_vertices_disp_map({ 0.0,0.0 });
+			DefaultUnorderedMap<size_t, std::set<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator>> finest_components_verices_map;
+
+			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
+
+				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
+				PSW.disconnect_edges(disconnection_lambda);
+				PSW.run_labeling();
+				std::cout << "Aligning N components: " << PSW.n_components << std::endl;
+
+				// Creating cluster based on distance between features
+				std::map<size_t, std::unordered_set<size_t>> components_geometries_map;
+				std::map<size_t, Eigen::VectorXd> components_transforms_map;
+				for (size_t _idx = 0; _idx < PSW.component_labels.size(); ++_idx) {
+					size_t comp_id = PSW.component_labels[_idx];
+					int geom_id = PSW.geometries_container[_idx].get_int_attribute(GeoVector<Boost_LineString_2>::ID_FIELD_NAME);
+					if (components_geometries_map.find(comp_id) != components_geometries_map.end())
+						components_geometries_map[comp_id].insert(geom_id);
+					else
+					{
+						components_geometries_map[comp_id] = std::unordered_set<size_t>();
+						components_geometries_map[comp_id].insert(geom_id);
+					}
+				}
+
+				// Creating cluster of vertices from the already clustered geometries
+				finest_components_verices_map.clear();
+				// Fill cluster vertices map with verices correpsonding to each component
+				for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
+					LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
+					circ_first = circ_current = v_handle->incident_halfedges();
+					do {
+						auto pid = circ_current->curve().data().front().parent_id;
+						for (auto& [component_id, respective_geometries_set] : components_geometries_map) {
+							if (respective_geometries_set.find(pid) != respective_geometries_set.end()) {
+								finest_components_verices_map[component_id].insert(v_handle);
+							}
+						}
+					} while (++circ_current != circ_first);
+				}
+
+				// Align clusters 1by1
+				for (const auto& [cluster_id, respective_vertices_handles] : finest_components_verices_map) {
+					std::cout << "Processing cluster: " << cluster_id << " with N vertices: " << respective_vertices_handles.size() << std::endl;
+					std::function<bool(LinearTopology<EK>::Arrangement_2::Vertex_const_iterator)> filter_predicate = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {
+						return respective_vertices_handles.find(viter) != respective_vertices_handles.end();
+					};
+
+					std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {
+						// TODO apply only on respective 
+						std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_cluster_disp_map;
+						for (auto& c_v_handle : respective_vertices_handles)
+							c_cluster_disp_map[c_v_handle] = { finest_vertices_disp_map[c_v_handle].first + disp[0], finest_vertices_disp_map[c_v_handle].second + disp[1] };
+						auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, c_cluster_disp_map);
+
+						double total_fitness = 0.0, total_length = 0.0;
+						for (auto& c_gwa : filtered_gvec) {
+							double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa.get_definition());
+							double c_edge_length = bg::length(c_gwa.get_definition());
+							total_fitness += (c_geometry_obj_val * c_edge_length);
+							total_length += c_edge_length;
+						}
+						double mean_fitness = total_fitness / total_length;
+						return mean_fitness;
+					};
+
+					cluster_problem<int>::bound_type objective_boundary = { { -MAX_DISP, -MAX_DISP}, {MAX_DISP, MAX_DISP} };
+
+					pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
+					pagmo::population pop{ problem, 4 };
+
+					//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
+					pagmo::algorithm algo{pagmo::pso{20}};
+					pop = algo.evolve(pop);
+					std::vector<double> best_value = pop.champion_f();
+					std::vector<double> best_arg = pop.champion_x();
+
+					for (auto& c_v_handle : respective_vertices_handles) {
+						finest_vertices_disp_map[c_v_handle].first += best_arg[0];
+						finest_vertices_disp_map[c_v_handle].second += best_arg[1];
+					}
+				}
+
+			}
+
+			auto rigid_aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, finest_vertices_disp_map);
+
+			GeoVector<Boost_LineString_2> rigid_gvec;
+			pool_geovector(rigid_aligned_gvec, rigid_gvec, reconstruction_fn);
+			rigid_gvec.to_file(params->temp_dir + "/rigid_aligned_full.shp");
+
+
 			// Defining datastructures
 			std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::list<std::tuple<double, double, double>>> displacement_map;
 			
@@ -248,9 +343,29 @@ namespace LxGeo
 						}						
 					}
 
+					double sub_global_conformity = 0.0; 
+					for (const auto& [k, non_rigid_disp] : c_neighbours_disp_map) {
+
+						std::pair<double, double>& rigid_disp = finest_vertices_disp_map[k];
+
+						/*double dotProduct = rigid_disp.first * non_rigid_disp.first + rigid_disp.second * non_rigid_disp.second;
+						double magnitudeA = std::sqrt(rigid_disp.first * rigid_disp.first + rigid_disp.second * rigid_disp.second);
+						double magnitudeB = std::sqrt(non_rigid_disp.first * non_rigid_disp.first + non_rigid_disp.second * non_rigid_disp.second);
+						double cossim = dotProduct / (magnitudeA * magnitudeB);
+						double c_vertex_error = std::abs(cossim - 1);*/
+						
+						double c_vertex_error = std::abs(rigid_disp.first - non_rigid_disp.first) + std::abs(rigid_disp.second - non_rigid_disp.second);
+						sub_global_conformity += c_vertex_error/MAX_DISP;
+					}
+
 					auto all_transformed_neighbour_points = all_neighbour_vertices | std::views::transform([&](auto& v_handle) { return v_handle->point() + Vector_2(c_neighbours_disp_map[v_handle].first, c_neighbours_disp_map[v_handle].second) ; });
-					auto transformed_diff = computePairwiseDifference(all_neighbour_points);
-					double coherency_error = (transformed_diff - original_diff).array().abs().mean();
+					auto transformed_diff = computePairwiseDifference(all_transformed_neighbour_points);
+					double coherency_error = (transformed_diff - original_diff).array().abs().sum();
+					auto cossim = computeCosineSimilarity(transformed_diff, original_diff);
+					bool order_preserved = !(cossim.array()<0.0).any();
+					if (!order_preserved) {
+						return 1e10;
+					}
 
 					std::list<Boost_LineString_2> transformed_edges;
 					
@@ -274,7 +389,7 @@ namespace LxGeo
 						total_length += c_edge_length;
 					}
 					double mean_fitness = total_fitness / total_length;
-					return mean_fitness + coherency_error;
+					return mean_fitness + 0.0*coherency_error + sub_global_conformity/20.0;
 				};
 
 				pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
@@ -292,13 +407,13 @@ namespace LxGeo
 				Point_2 displaced_center = v_handle->point() + Vector_2(tx, ty);
 				for (auto& c_v_handle : all_neighbour_vertices) {
 					if (c_v_handle == v_handle) {
-						if  (best_value[0]<0.9)
+						if (true)//(best_value[0]<0.9)
 							displacement_map[c_v_handle].push_back({ tx, ty, 1.0 / (0.0001+best_value[0]) });
 						//else
-						//	displacement_map[c_v_handle].push_back({ 0, 0, 1.0 });
+							//displacement_map[c_v_handle].push_back({ finest_vertices_disp_map[c_v_handle].first, finest_vertices_disp_map[c_v_handle].second, 1.0 });
 					}
 					else {
-						if (best_value[0] < 0.9) {
+						if (true){//(best_value[0] < 0.9) {
 							Point_2 new_b_position = rotate_around_point(displaced_center, c_v_handle->point() + Vector_2(tx, ty), best_arg[2 + c_vertex_idx]);
 							auto diff_combined_transfrom = new_b_position - c_v_handle->point();
 							//displacement_map[c_v_handle].push_back({ CGAL::to_double(diff_combined_transfrom.x()), CGAL::to_double(diff_combined_transfrom.y()), 1.0 / (0.0001 + best_value[0]) });
@@ -338,127 +453,7 @@ namespace LxGeo
 			}
 			pts_gvec.to_file(params->temp_dir + "/pts_d.shp");
 
-			/*
-			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
-				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
-				PSW.disconnect_edges(disconnection_lambda);
-				PSW.run_labeling();
-				std::cout << "Aligning N components: " << PSW.n_components << std::endl;
-
-				// Creating cluster based on distance between features
-				std::map<size_t, std::unordered_set<size_t>> components_geometries_map;
-				std::map<size_t, Eigen::VectorXd> components_transforms_map;
-				for (size_t _idx = 0; _idx < PSW.component_labels.size(); ++_idx) {
-					size_t comp_id = PSW.component_labels[_idx];
-					int geom_id = PSW.geometries_container[_idx].get_int_attribute(GeoVector<Boost_LineString_2>::ID_FIELD_NAME);
-					if (components_geometries_map.find(comp_id) != components_geometries_map.end())
-						components_geometries_map[comp_id].insert(geom_id);
-					else
-					{
-						components_geometries_map[comp_id] = std::unordered_set<size_t>();
-						components_geometries_map[comp_id].insert(geom_id);
-					}
-				}
-
-				// Creating cluster of vertices from the already clustered geometries
-				std::unordered_map<size_t, std::set<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator>> components_verices_map;
-				// Fill cluster vertices map with verices correpsonding to each component
-				for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
-					LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
-					circ_first = circ_current = v_handle->incident_halfedges();
-					do {
-						auto pid = circ_current->curve().data().front().parent_id;
-						for (auto& [component_id, respective_geometries_set] : components_geometries_map) {
-							if (respective_geometries_set.find(pid) != respective_geometries_set.end()) {
-								components_verices_map[component_id].insert(v_handle);
-							}
-						}
-					} while (++circ_current != circ_first);
-				}
-
-				GeoVector<Boost_Point_2> pts_gvec;
-				// Align clusters 1by1
-				for (const auto& [cluster_id, respective_vertices_handles] : components_verices_map) {
-					std::cout << "Processing cluster: " << cluster_id << " with N vertices: " << respective_vertices_handles.size() << std::endl;
-					std::function<bool(LinearTopology<EK>::Arrangement_2::Vertex_const_iterator)> filter_predicate = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {
-						return respective_vertices_handles.find(viter) != respective_vertices_handles.end();
-					};
-
-					auto get_unique_vertex_objective = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator unique_vertex) {
-
-						std::function<double(const std::vector<double>&)> bound_objective_all = [&](const std::vector<double>& disp) ->double {
-							// TODO apply only on respective 
-							std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_cluster_disp_map;
-							for (auto& c_v_handle : respective_vertices_handles)
-							{
-								c_cluster_disp_map[c_v_handle] = { displacement_map[c_v_handle].first + disp[2], displacement_map[c_v_handle].second + disp[3] };
-							}
-							c_cluster_disp_map[unique_vertex].first = disp[0]; c_cluster_disp_map[unique_vertex].second = disp[1];
-							auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, c_cluster_disp_map);
-
-							double total_fitness = 0.0, total_length = 0.0;
-							for (auto& c_gwa : filtered_gvec) {
-								double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa.get_definition());
-								double c_edge_length = bg::length(c_gwa.get_definition());
-								total_fitness += (c_geometry_obj_val * c_edge_length);
-								total_length += c_edge_length;
-							}
-							double mean_fitness = total_fitness / total_length;
-							return mean_fitness;
-						};
-						return bound_objective_all;
-					};
-					cluster_problem<int>::bound_type objective_boundary_all = { 
-						std::vector<double>(4, -MAX_DISP),
-						std::vector<double>(4, MAX_DISP) 
-					};
-
-
-					std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {
-						// TODO apply only on respective 
-						std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_cluster_disp_map;
-						for (auto& c_v_handle : respective_vertices_handles)
-							c_cluster_disp_map[c_v_handle] = { displacement_map[c_v_handle].first + disp[0], displacement_map[c_v_handle].second + disp[1] };
-						auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, c_cluster_disp_map);
-
-						double total_fitness = 0.0, total_length = 0.0;
-						for (auto& c_gwa : filtered_gvec) {
-							double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa.get_definition());
-							double c_edge_length = bg::length(c_gwa.get_definition());
-							total_fitness += (c_geometry_obj_val * c_edge_length);
-							total_length += c_edge_length;
-						}
-						double mean_fitness = total_fitness / total_length;
-						return mean_fitness;
-					};
-
-					cluster_problem<int>::bound_type objective_boundary = { { -MAX_DISP, -MAX_DISP}, {MAX_DISP, MAX_DISP} };
-
-					pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
-					pagmo::population pop{ problem, 4 };
-
-					//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
-					pagmo::algorithm algo{pagmo::pso{20}};
-					pop = algo.evolve(pop);
-					std::vector<double> best_value = pop.champion_f();
-					std::vector<double> best_arg = pop.champion_x();
-
-					for (auto& c_v_handle : respective_vertices_handles) {						
-						displacement_map[c_v_handle].first += best_arg[0];
-						displacement_map[c_v_handle].second += best_arg[1];						
-						Geometries_with_attributes<Boost_Point_2> c_pt(Boost_Point_2(PointTraits<Point_2>::getX(c_v_handle->point()), PointTraits<Point_2>::getY(c_v_handle->point())));
-						c_pt.set_double_attribute("dx", displacement_map[c_v_handle].first);
-						c_pt.set_double_attribute("dy", displacement_map[c_v_handle].second);
-						pts_gvec.add_geometry(c_pt);
-					}
-				}
-				pts_gvec.to_file(params->temp_dir + "/_" + std::to_string(*distance_val_iter) + "vertices_disp.shp");
-
-			}*/
-			
-			
 			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, agg_displacement_map);
-			//aligned_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_parts.shp");
 
 			GeoVector<Boost_LineString_2> pooled_gvec;
 			pool_geovector(aligned_gvec, pooled_gvec, reconstruction_fn);
