@@ -11,6 +11,7 @@
 #include "topology/topology_datastructure.h"
 #include "graph_weights/spatial_weights.h"
 #include "stitching/vector_on_raster_stitcher.h"
+#include "design_pattern/defaultmap.h"
 
 namespace LxGeo
 {
