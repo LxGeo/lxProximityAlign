@@ -60,6 +60,27 @@ namespace LxGeo
 			return pairwiseDifferences;
 		}
 
+		Eigen::VectorXd computeCosineSimilarity(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B) {
+			assert(A.rows() == B.rows() && A.cols() == B.cols() && "Matrices must have the same dimensions.");
+			int N = A.rows();
+
+			Eigen::VectorXd cosineSimilarities(N);
+			for (int i = 0; i < N; ++i) {
+				// Check for null vectors
+				if (A.row(i).norm() == 0.0 || B.row(i).norm() == 0.0) {
+					cosineSimilarities(i) = 0.0;  // Assign default value for null vectors
+					continue;
+				}
+
+				Eigen::RowVectorXd normalizedA = A.row(i).normalized();
+				Eigen::RowVectorXd normalizedB = B.row(i).normalized();
+
+				cosineSimilarities(i) = normalizedA.dot(normalizedB);
+			}
+
+			return cosineSimilarities;
+		}
+
 		Point_2 rotate_around_point(const Point_2& A, const Point_2& B, double angle_in_degrees) {
 			// Convert angle to radians
 			double angle_in_radians = angle_in_degrees * CGAL_PI / 180.0;
