@@ -69,6 +69,17 @@ else()
 endif()
 
 find_package(pagmo CONFIG REQUIRED)
+#find_package(matplot++ CONFIG REQUIRED)
+include(FetchContent)
+FetchContent_Declare(matplotplusplus
+        GIT_REPOSITORY https://github.com/alandefreitas/matplotplusplus
+        GIT_TAG origin/master)
+
+FetchContent_GetProperties(matplotplusplus)
+if(NOT matplotplusplus_POPULATED)
+    FetchContent_Populate(matplotplusplus)
+    add_subdirectory(${matplotplusplus_SOURCE_DIR} ${matplotplusplus_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
 
 include_directories(include)
 include_directories("$ENV{LX_GEO_REPOS_ROOT}/LxGeoCppLibs/libs/shared/include/")
@@ -85,6 +96,8 @@ target_link_libraries(${PROJECT_NAME} ${USED_BOOST_LIBS})
 
 target_link_libraries(${PROJECT_NAME} ${GDAL_LIBRARIES} ${OpenCV_LIBS} fmt::fmt fmt::fmt-header-only)
 target_link_libraries(${PROJECT_NAME} Pagmo::pagmo)
+#target_link_libraries(${PROJECT_NAME} Matplot++::cimg Matplot++::matplot Matplot++::nodesoup)
+target_link_libraries(${PROJECT_NAME} matplot)
 
 target_link_libraries(${PROJECT_NAME} debug ../out/Debug/LxGeoFactoryShared)
 target_link_libraries(${PROJECT_NAME} optimized ../out/Release/LxGeoFactoryShared)
