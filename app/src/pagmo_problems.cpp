@@ -103,6 +103,17 @@ namespace LxGeo
 			return Point_2(x_final, y_final);
 		}
 
+		std::vector<double> measure_fitness(GeoVector<Boost_LineString_2>& input_geovector, std::function<double(const Boost_LineString_2&)> linestring_fitness_evaluator) {
+
+			std::vector<double> output_fitness; output_fitness.reserve(input_geovector.geometries_container.size());
+
+			for (const auto& geom : input_geovector) {
+				double c_fitness = linestring_fitness_evaluator(geom.get_definition());
+				output_fitness.push_back(c_fitness);
+			}
+			return output_fitness;
+		}
+
 		void pagmo_proximity_align_linear(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_LineString_2>& input_geovector,

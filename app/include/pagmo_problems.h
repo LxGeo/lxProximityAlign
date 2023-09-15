@@ -39,6 +39,8 @@ namespace LxGeo
 
 		};
 
+		std::vector<double> measure_fitness(GeoImage<cv::Mat>& ref_gimg, GeoVector<Boost_LineString_2>& input_geovector);
+
 		void pagmo_proximity_align_linear(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_LineString_2>& input_geovector,
