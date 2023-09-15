@@ -2,6 +2,7 @@
 #include <pagmo/algorithm.hpp>
 #include <pagmo/algorithms/nlopt.hpp>
 #include <pagmo/algorithms/pso.hpp>
+#include <pagmo/algorithms/de.hpp>
 #include <pagmo/problem.hpp>
 #include <nlohmann/json.hpp>
 #include "defs.h"
@@ -46,6 +47,14 @@ namespace LxGeo
 		void pagmo_proximity_align_linear(
 			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
 			GeoVector<Boost_LineString_2>& input_geovector,
+			std::vector<double>& neighbour_distance_band_values,
+			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
+			double MAX_DISP,
+			std::pair<std::string, std::string> OBJECTIVE_FIELD_NAME_PAIR);
+
+		void pagmo_proximity_align_polygon(
+			std::unordered_map<std::string, matrix>& matrices_map, GeoImage<cv::Mat>& ref_gimg,
+			GeoVector<Boost_Polygon_2>& input_geovector,
 			std::vector<double>& neighbour_distance_band_values,
 			std::function<float(numcpp::DetailedStats<float>&)> fitness_from_stats_functor,
 			double MAX_DISP,
