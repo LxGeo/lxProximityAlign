@@ -354,7 +354,7 @@ namespace LxGeo
 						std::vector<double>(2* all_neighbour_vertices.size(), MAX_DISP)
 				};*/
 				cluster_problem<int>::bound_type objective_boundary;
-				double MAX_ROT_DEGREES = 10.0;
+				double MAX_ROT_DEGREES = 5.0;
 				objective_boundary.first = std::vector<double>(all_neighbour_vertices.size() + 1 ,-MAX_ROT_DEGREES);
 				objective_boundary.second = std::vector<double>(all_neighbour_vertices.size() + 1, MAX_ROT_DEGREES);
 
@@ -452,14 +452,18 @@ namespace LxGeo
 					}
 					call_id++;
 					*/
+					double alpha = 0.99;
+					return alpha * mean_fitness + 0.0*coherency_error + (1.0- alpha)*sub_global_conformity;
 				};
 
 				pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
-				pagmo::population pop{ problem, 5 };
+				size_t num_pop = 10 * all_neighbour_vertices.size();
+				pagmo::population pop{ problem, num_pop };
 				pop.set_x(0, std::vector<double>(objective_boundary.first.size(), 0.0));
 
 				//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
-				pagmo::algorithm algo{pagmo::pso{50}};
+				unsigned int num_gen = 10 * all_neighbour_vertices.size();
+				pagmo::algorithm algo{pagmo::de{num_gen}};
 				pop = algo.evolve(pop);
 				std::vector<double> best_value = pop.champion_f();
 				std::vector<double> best_arg = pop.champion_x();
@@ -486,6 +490,8 @@ namespace LxGeo
 					}
 				}
 
+				//std::string out_path = params->temp_dir + "/node_" + std::to_string(PointTraits<Point_2>::getX(v_handle->point())) + ".shp";
+				//c_node_search_gvec.to_file(out_path);
 			}
 
 			bar.finish();
