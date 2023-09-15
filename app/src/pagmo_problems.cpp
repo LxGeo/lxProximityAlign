@@ -315,6 +315,7 @@ namespace LxGeo
 			tqdm bar;
 			int c_estimated_vertex_handle = 0;
 			for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
+				//GeoVector<Boost_LineString_2> c_node_search_gvec;
 				bar.progress(c_estimated_vertex_handle++, arr.number_of_vertices());
 				size_t N_MAX_LEVEL = 1;
 				auto temp_half_edge = v_handle->incident_halfedges()->source()->incident_halfedges();
@@ -361,6 +362,7 @@ namespace LxGeo
 				auto all_neighbour_points = all_neighbour_vertices | std::views::transform([](auto& v_handle) { return v_handle->point(); });
 				auto original_diff = computePairwiseDifference(all_neighbour_points);
 				
+				//int call_id = 0;
 				std::function<double(const std::vector<double>&)> bound_objective = [&](const std::vector<double>& disp) ->double {					
 					double tx = disp[0] / MAX_ROT_DEGREES * MAX_DISP, ty = disp[1] / MAX_ROT_DEGREES * MAX_DISP;
 					// disp contain displacement values for each vertex in the following order [ v0_x, v0_y, v1_x, ..., vN_x, vN_y]
@@ -425,7 +427,31 @@ namespace LxGeo
 						total_length += c_edge_length;
 					}
 					double mean_fitness = total_fitness / total_length;
-					return mean_fitness + 0.0*coherency_error + sub_global_conformity/20.0;
+
+					/*
+					for (auto& t_edge : transformed_edges)
+					{
+						c_node_search_gvec.add_geometry(t_edge);
+						auto& added_gwa = *c_node_search_gvec.geometries_container.rbegin();
+						auto rot_values = disp | std::ranges::views::drop(2) | std::views::transform([](double num) {return std::to_string(num);});
+						std::string disp_string = std::to_string(tx) + " || " + std::to_string(ty) + " || " + std::accumulate(
+							rot_values.begin(),
+							rot_values.end(),
+							std::string(),
+							[](std::string a, std::string b) {
+								return a + " * " + b;
+							}
+						);
+						added_gwa.set_string_attribute("disp", disp_string);
+						added_gwa.set_int_attribute("call_id", call_id);
+						added_gwa.set_double_attribute("tx", tx);
+						added_gwa.set_double_attribute("ty", ty);
+						added_gwa.set_double_attribute("m_fit", mean_fitness);
+						added_gwa.set_double_attribute("s_g_co", sub_global_conformity);
+						added_gwa.set_double_attribute("tot_obj", mean_fitness + 0.0 * coherency_error + sub_global_conformity / 10.0);
+					}
+					call_id++;
+					*/
 				};
 
 				pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
