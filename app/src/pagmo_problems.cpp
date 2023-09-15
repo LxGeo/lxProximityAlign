@@ -140,6 +140,21 @@ namespace LxGeo
 				return fitness_from_stats_functor(stats);
 			};
 
+			/***** Measure fitness before alignment *****/
+			auto f = matplot::figure(true);
+			std::replace(params->temp_dir.begin(), params->temp_dir.end(), '\\', '/');
+			std::vector<double> edges = matplot::iota(0, 0.05, 1);
+			std::vector<std::string> x_labels;
+			std::transform(edges.begin(), edges.end(), std::back_inserter(x_labels), [](double v) {return std::to_string(v); });
+			auto before_al_fitness = measure_fitness(input_geovector, linestring_fitness_evaluator);
+			auto h_before_al = matplot::hist(before_al_fitness, edges);
+			h_before_al->normalization(matplot::histogram::normalization::probability);
+			matplot::xlabel("Fitness");
+			matplot::ylabel("Frequency");
+			matplot::ylim({ 0, +1 });
+			matplot::save( params->temp_dir + "histogram_before_alignment.png");
+			matplot::cla();
+
 			auto linestring2seg_unpooling_fn = [](const Geometries_with_attributes<Boost_LineString_2>& parent_linestring) -> std::list<Geometries_with_attributes<Boost_LineString_2>> {
 				std::list<Geometries_with_attributes<Boost_LineString_2>> unpooled_linestrings;
 
@@ -282,6 +297,16 @@ namespace LxGeo
 			GeoVector<Boost_LineString_2> rigid_gvec;
 			pool_geovector(rigid_aligned_gvec, rigid_gvec, reconstruction_fn);
 			rigid_gvec.to_file(params->temp_dir + "/rigid_aligned_full.shp");
+
+			/***** Measure fitness after rigid alignment *****/
+			auto after_rigid_al_fitness = measure_fitness(rigid_gvec, linestring_fitness_evaluator);
+			auto h_after_rigid = matplot::hist(after_rigid_al_fitness, edges);
+			h_after_rigid->normalization(matplot::histogram::normalization::probability);
+			matplot::xlabel("Fitness");
+			matplot::ylabel("Frequency");
+			matplot::ylim({ 0, +1 });
+			matplot::save(params->temp_dir + "histogram_after_rigid_alignment.png");
+			matplot::cla();
 
 
 			// Defining datastructures
@@ -469,6 +494,46 @@ namespace LxGeo
 			GeoVector<Boost_LineString_2> pooled_gvec;
 			pool_geovector(aligned_gvec, pooled_gvec, reconstruction_fn);
 			pooled_gvec.to_file(params->temp_dir + "/aligned_full.shp");
+
+			/***** Measure fitness after non_rigid alignment *****/
+			auto after_non_rigid_al_fitness = measure_fitness(pooled_gvec, linestring_fitness_evaluator);
+			auto h_after_non_rigid = matplot::hist(after_non_rigid_al_fitness, edges);
+			h_after_non_rigid->normalization(matplot::histogram::normalization::probability);
+			matplot::xlabel("Fitness");
+			matplot::ylabel("Frequency");
+			matplot::ylim({ 0, +1 });
+			matplot::save(params->temp_dir + "histogram_after_non_rigid_alignment.png");
+			matplot::cla();
+
+			/*matplot::hist(before_al_fitness, edges)->normalization(matplot::histogram::normalization::probability);
+			matplot::hold(matplot::on);
+			matplot::hist(after_rigid_al_fitness, edges)->normalization(matplot::histogram::normalization::probability);
+			matplot::hold(matplot::on);
+			matplot::hist(after_non_rigid_al_fitness, edges)->normalization(matplot::histogram::normalization::probability);*/
+
+			std::vector<std::string> newcolors = { "#B10C0C", "#FFF133", "#8715f2" };
+			matplot::colororder(newcolors);
+
+			std::vector<std::vector<double>> multibar_y;
+			multibar_y.push_back(h_before_al->values());
+			multibar_y.push_back(h_after_rigid->values());
+			multibar_y.push_back(h_after_non_rigid->values());
+
+			nlohmann::json info_map;
+			info_map["before_alignment"] = numcpp::statsFn::mean_fn(before_al_fitness);
+			info_map["after_rigid"] = numcpp::statsFn::mean_fn(after_rigid_al_fitness);
+			info_map["after_non_rigid"] = numcpp::statsFn::mean_fn(after_non_rigid_al_fitness);
+			std::ofstream o( params->temp_dir + "info.json");
+			o << std::setw(4) << info_map << std::endl;
+
+			matplot::bar(multibar_y);
+			matplot::legend({ "Before alignment", "After rigid alignment", "After non-rigid alignment" });
+			
+			matplot::xlabel("Fitness");
+			matplot::ylabel("Frequency");
+			matplot::save(params->temp_dir + "1_histogram_all.svg");
+			matplot::xlim({ 0, 0.7*edges.size()});
+			matplot::save(params->temp_dir + "0.7_histogram_all.svg");
 
 		}
 

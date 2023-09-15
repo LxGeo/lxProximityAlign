@@ -3,6 +3,7 @@
 #include <pagmo/algorithms/nlopt.hpp>
 #include <pagmo/algorithms/pso.hpp>
 #include <pagmo/problem.hpp>
+#include <nlohmann/json.hpp>
 #include "defs.h"
 #include "parameters.h"
 #include "defs_opencv.h"
@@ -12,6 +13,7 @@
 #include "graph_weights/spatial_weights.h"
 #include "stitching/vector_on_raster_stitcher.h"
 #include "design_pattern/defaultmap.h"
+#include <matplot/matplot.h>
 
 namespace LxGeo
 {
