@@ -37,10 +37,13 @@ namespace LxGeo
 				assert(xy_values.size() == 2 && "Epipolar couple file is corrupt!");
 				xy_cst = std::make_pair(xy_values[0], xy_values[1]);
 			}
-			else {
+			else if (!params->r_imd_path.empty()){
 				IMetaData r_imd(params->r_imd_path);
 				IMetaData i_imd(params->i_imd_path);
 				xy_cst = compute_roof2roof_constants(RADS(i_imd.satAzimuth), RADS(i_imd.satElevation), RADS(r_imd.satAzimuth), RADS(r_imd.satElevation));
+			}
+			else {
+				xy_cst = { 0,0 };
 			}
 			MAX_DISP = params->max_disparity;
 
@@ -53,6 +56,10 @@ namespace LxGeo
 			}
 
 			//output dirs creation
+			if (!endswith(params->output_shapefile, ".shp")) {
+				std::cout << "Output shapefile should have .shp extension!" << std::endl;
+				return false;
+			}
 			boost::filesystem::path output_path(params->output_shapefile);
 			boost::filesystem::path output_parent_dirname = output_path.parent_path();
 			boost::filesystem::path output_temp_path = output_parent_dirname / params->temp_dir;
@@ -94,7 +101,10 @@ namespace LxGeo
 			matrices_map["proximity"] = ref_raster.raster_data;
 
 			// Load shapefile
-			GeoVector<Boost_Polygon_2> in_gvector = GeoVector<Boost_Polygon_2>::from_file(params->input_shapefile_to_align);
+			Boost_Polygon_2 extents;
+			//boost::geometry::read_wkt(
+			//	"Polygon ((685997.13262533536180854 4630918.40684657730162144, 686254.43405542231630534 4630919.21343413181602955, 686252.8208803121233359 4630808.71093907952308655, 685999.149094223161228 4630811.13070174492895603, 685997.13262533536180854 4630918.40684657730162144))", extents);
+			GeoVector<Boost_Polygon_2> in_gvector = GeoVector<Boost_Polygon_2>::from_file(params->input_shapefile_to_align, "", extents);
 			OGRSpatialReference spatial_ref;
 			VProfile vpr = VProfile::from_gdal_dataset(load_gdal_vector_dataset_shared_ptr(params->input_shapefile_to_align));
 			spatial_ref.importFromWkt(vpr.s_crs_wkt.c_str());
@@ -135,15 +145,19 @@ namespace LxGeo
 			
 			std::string DISP_COLUMN_NAME = "DISP";
 
+			
 			//nm_proximity_align_1d(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, xy_cst, fitness_from_stats_functor, MAX_DISP, DISP_COLUMN_NAME);
 			std::pair<std::string, std::string> disp_column_names = { "DISP_X", "DISP_Y" };
-			nm_proximity_align(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
+			pagmo_proximity_align_polygon(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
+			//nm_proximity_align(matrices_map, ref_gimg, in_gvector, params->neighbour_distance_band_values, fitness_from_stats_functor, MAX_DISP, disp_column_names);
 			// Assign confidence and displacement			
 			
 			for (auto& c_gwa : in_gvector.geometries_container) {
 
 				//double disp_value = c_gwa.get_double_attribute(DISP_COLUMN_NAME);
+				//double ddx = disp_value * xy_cst.first;
 				double ddx = c_gwa.get_double_attribute(disp_column_names.first); //disp_value * xy_cst.first;
+				//double ddy = disp_value * xy_cst.second;
 				double ddy = c_gwa.get_double_attribute(disp_column_names.second); //disp_value * xy_cst.second;
 				bg::strategy::transform::translate_transformer<double, 2, 2> trans_obj(ddx, ddy);
 				auto translated_geom = translate_geometry(c_gwa.get_definition(), trans_obj);

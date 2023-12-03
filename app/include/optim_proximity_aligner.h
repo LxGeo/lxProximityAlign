@@ -13,6 +13,7 @@
 #include "affine_geometry/affine_transformer.h"
 #include "stitching/vector_on_raster_stitcher.h"
 #include "design_pattern/extended_iterators.h"
+#include "pagmo_problems.h"
 
 namespace LxGeo
 {

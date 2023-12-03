@@ -530,6 +530,27 @@ namespace LxGeo
 				return unpooled_linestrings;
 			};
 
+			std::function<Geometries_with_attributes<Boost_LineString_2>(std::list<Geometries_with_attributes<Boost_LineString_2>>&)> reconstruction_fn = [](std::list<Geometries_with_attributes<Boost_LineString_2>>& geom_parts) ->Geometries_with_attributes<Boost_LineString_2> {
+				geom_parts.sort([](const Geometries_with_attributes<Boost_LineString_2>& a, const Geometries_with_attributes<Boost_LineString_2>& b) { return a.get_double_attribute("pos") < b.get_double_attribute("pos"); });
+				Boost_LineString_2 reconstructed_l;
+				if (geom_parts.size() == 0) { return Geometries_with_attributes<Boost_LineString_2>(); }
+				if (geom_parts.size() == 1) {
+					return Geometries_with_attributes<Boost_LineString_2>(geom_parts.begin()->get_definition());
+				}
+				auto first_part = geom_parts.begin()->get_definition();
+				auto second_part = std::next(geom_parts.begin())->get_definition();
+				if (bg::distance(first_part.at(0), second_part.at(0)) < 1e-5 || bg::distance(first_part.at(0), second_part.at(1)) < 1e-5)
+					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(1)); // adding starting point
+				else
+					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(0)); // adding starting point
+				for (const auto& geom_part : geom_parts) {
+					auto point_to_add = (bg::distance(reconstructed_l.back(), geom_part.get_definition().at(0)) < 1e-5) ? geom_part.get_definition().at(1) : geom_part.get_definition().at(0);
+					reconstructed_l.push_back(point_to_add);
+				};
+				Geometries_with_attributes<Boost_LineString_2> gwa_l(reconstructed_l);
+				return gwa_l;
+			};
+
 			GeoVector<Boost_LineString_2> unpooled_linestring_gvec; unpool_geovector<Boost_LineString_2, Boost_LineString_2>(input_geovector, unpooled_linestring_gvec, linestring2seg_unpooling_fn);
 
 			std::function<LinearTopology<EK>::SegmentIdentification(const Geometries_with_attributes<Boost_LineString_2>&)> gwa2segId_fn =
@@ -543,6 +564,137 @@ namespace LxGeo
 			for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
 				displacement_map[v_handle] = { 0,0 };
 			}
+
+			/*for (int c_iter = 0; c_iter < 10; c_iter++) {
+
+				std::pair<double, double> c_global_disp = { 0.0, 0.0 };
+				// Loop align each vertex indep
+				GeoVector<Boost_Point_2> pts_gvec;
+				for (auto c_vertex = arr.vertices_begin(); c_vertex != arr.vertices_end(); c_vertex++) {
+
+					std::function<double(const std::pair<double, double>&)> bound_objective = [&](const std::pair<double, double>& disp) ->double {
+
+						// get all respective segments after last modification
+						std::list<Boost_LineString_2> respective_segments;
+						LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
+						circ_first = circ_current = c_vertex->incident_halfedges();
+						do {
+							Boost_LineString_2 c_incident(
+								{
+									{PointTraits<Point_2>::getX(c_vertex->point()) + displacement_map[c_vertex].first, PointTraits<Point_2>::getY(c_vertex->point()) + displacement_map[c_vertex].second},
+									{PointTraits<Point_2>::getX(circ_current->source()->point()) + displacement_map[circ_current->source()].first, PointTraits<Point_2>::getY(circ_current->source()->point()) + displacement_map[circ_current->source()].second}
+								}
+							);
+							respective_segments.push_back(c_incident);
+						} while (++circ_current != circ_first);
+
+						// transform edges
+						std::list<Boost_LineString_2> transformed_respective_segments;
+						for (auto& c_geom : respective_segments) {
+							Boost_LineString_2 transformed_geom(c_geom);
+							auto& src_pt = c_geom.at(0);
+							auto& tar_pt = c_geom.at(1);
+							transformed_geom.at(0).set<0>(src_pt.get<0>() + disp.first); transformed_geom.at(0).set<1>(src_pt.get<1>() + disp.second);
+							transformed_geom.at(1).set<0>(tar_pt.get<0>() + disp.first); transformed_geom.at(1).set<1>(tar_pt.get<1>() + disp.second);
+							transformed_respective_segments.push_back(transformed_geom);
+						}
+
+						// compute fitness
+						double total_fitness = 0.0, total_length = 0.0;
+						for (auto& c_geom : transformed_respective_segments) {
+							double c_geometry_obj_val = linestring_fitness_evaluator(c_geom);
+							double c_edge_length = bg::length(c_geom);
+							total_fitness += (c_geometry_obj_val * c_edge_length);
+							total_length += c_edge_length;
+						}
+						double mean_fitness = total_fitness / total_length;
+						return mean_fitness;
+					};
+
+					auto ND_adpated_optimizer = [&MAX_DISP](std::function<double(const std::pair<double, double>&)>& f, ND::PT left, ND::PT right, double tol, int iter)->ND::PT {
+						optim::algo_settings_t c_settings;
+						c_settings.iter_max = iter;
+						//c_settings.rel_sol_change_tol = 0.1;
+						c_settings.vals_bound = true;
+						c_settings.lower_bounds = Eigen::VectorXd(2); c_settings.lower_bounds << left[0], left[1];
+						c_settings.upper_bounds = Eigen::VectorXd(2); c_settings.upper_bounds << right[0], right[1];
+
+						optim::Mat_t simplex_points(3, 2);
+						simplex_points.row(0) << -5, 10;
+						simplex_points.row(1) << 0, 15;
+						simplex_points.row(2) << -10, -5;
+						c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
+						//c_settings.print_level = 3;
+
+						Eigen::VectorXd c_optimal_displacement(2); c_optimal_displacement << 0.0, 0.0;
+						auto ND_adapted_objective_fn = [&f, &MAX_DISP](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
+							double fitness_factor = f({ vals_inp(0), vals_inp(1) });
+							return fitness_factor;
+						};
+						bool success = optim::nm(c_optimal_displacement, ND_adapted_objective_fn, nullptr, c_settings);
+						if (true)
+							return { c_optimal_displacement(0), c_optimal_displacement(1) };
+						else {
+							std::cout << "failed suboptimization!" << std::endl;
+							return { 0,0 };
+						}
+					};
+
+					auto optimal_displacment = ND_adpated_optimizer(bound_objective, { -20,-20 }, { 20,20 }, 0, 50);
+					//c_global_disp.first += optimal_displacment[0]/ arr.number_of_vertices(); c_global_disp.second += optimal_displacment[1]/ arr.number_of_vertices();
+					displacement_map[c_vertex] = { optimal_displacment[0], optimal_displacment[1] };
+					Geometries_with_attributes<Boost_Point_2> c_pt(Boost_Point_2(PointTraits<Point_2>::getX(c_vertex->point()), PointTraits<Point_2>::getY(c_vertex->point())));
+					c_pt.set_double_attribute("dx", optimal_displacment[0]);
+					c_pt.set_double_attribute("dy", optimal_displacment[1]);
+					c_pt.set_double_attribute("fitt", bound_objective({ optimal_displacment[0], optimal_displacment[1]}));
+					pts_gvec.add_geometry(c_pt);
+				}
+				pts_gvec.to_file(params->temp_dir + "/vertices_disp.shp");
+
+				for (auto c_vertex = arr.vertices_begin(); c_vertex != arr.vertices_end(); c_vertex++) {
+					//displacement_map[c_vertex] = c_global_disp;
+				}
+				
+
+				auto aligned_iter_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, displacement_map);
+				GeoVector<Boost_LineString_2> pooled_gvec;
+				pool_geovector(aligned_iter_gvec, pooled_gvec, reconstruction_fn);
+				pooled_gvec.to_file(params->temp_dir + "/_"+std::to_string(c_iter) + "_aligned_full.shp");
+
+			}*/
+
+			auto ND_adpated_optimizer = [&MAX_DISP](std::function<double(const std::pair<double, double>&)>& f, ND::PT left, ND::PT right, double tol, int iter)->ND::PT {
+				optim::algo_settings_t c_settings;
+				c_settings.iter_max = iter;
+				//c_settings.rel_sol_change_tol = 0.1;
+				c_settings.vals_bound = true;
+				c_settings.lower_bounds = Eigen::VectorXd(2); c_settings.lower_bounds << left[0], left[1];
+				c_settings.upper_bounds = Eigen::VectorXd(2); c_settings.upper_bounds << right[0], right[1];
+
+				optim::Mat_t simplex_points(3, 2);
+				/*simplex_points.row(0) << -5, 10;
+				simplex_points.row(1) << 0, 15;
+				simplex_points.row(2) << -10, -5;*/
+				simplex_points.row(0) << -50, 50;
+				simplex_points.row(1) << 50, 50;
+				simplex_points.row(2) << -50, -50;
+				c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
+				//c_settings.print_level = 3;
+
+				Eigen::VectorXd c_optimal_displacement(2); c_optimal_displacement << 0.0, 0.0;
+				auto ND_adapted_objective_fn = [&f, &MAX_DISP](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
+					double fitness_factor = f({ vals_inp(0), vals_inp(1) });
+					return fitness_factor;
+				};
+				bool success = optim::nm(c_optimal_displacement, ND_adapted_objective_fn, nullptr, c_settings);
+				std::cout << c_optimal_displacement(0) << " " << c_optimal_displacement(1) << std::endl;
+				if (true)
+					return { c_optimal_displacement(0), c_optimal_displacement(1) };
+				else {
+					std::cout << "failed suboptimization!" << std::endl;
+					return { 0,0 };
+				}
+			};
 
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
@@ -580,16 +732,19 @@ namespace LxGeo
 					while (++circ_current != circ_first);
 				}
 
+				GeoVector<Boost_Point_2> pts_gvec;
 				for (const auto& [cluster_id, respective_vertices_handles] : components_verices_map) {
 
-					std::function<double(const std::pair<double, double>&)> bound_objective = [&](const std::pair<double, double>& disp) ->double {
-						std::function<bool(LinearTopology<EK>::Arrangement_2::Vertex_const_iterator)> filter_predicate = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {
-							return respective_vertices_handles.find(viter) != respective_vertices_handles.end();
-						};
+					std::function<bool(LinearTopology<EK>::Arrangement_2::Vertex_const_iterator)> filter_predicate = [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {
+						return respective_vertices_handles.find(viter) != respective_vertices_handles.end();
+					};
+
+					std::function<double(const std::pair<double, double>&)> bound_objective = [&](const std::pair<double, double>& disp) ->double {						
 						// TODO apply only on respective 
+						std::unordered_map < LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_cluster_disp_map;
 						for (auto& c_v_handle : respective_vertices_handles)
-							displacement_map[c_v_handle] = disp;
-						auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, displacement_map);
+							c_cluster_disp_map[c_v_handle] = { displacement_map[c_v_handle].first + disp.first, displacement_map[c_v_handle].second + disp.second };
+						auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, filter_predicate, c_cluster_disp_map);
 
 						double total_fitness = 0.0, total_length = 0.0;
 						for (auto& c_gwa : filtered_gvec) {
@@ -602,74 +757,62 @@ namespace LxGeo
 						return mean_fitness;
 					};
 
-					auto ND_adpated_optimizer = [&MAX_DISP](std::function<double(const std::pair<double, double>&)>& f, ND::PT left, ND::PT right, double tol, int iter)->ND::PT {
-						optim::algo_settings_t c_settings;
-						c_settings.iter_max = iter;
-						//c_settings.rel_sol_change_tol = 0.1;
-						c_settings.vals_bound = true;
-						c_settings.lower_bounds = Eigen::VectorXd(2); c_settings.lower_bounds << left[0], left[1];
-						c_settings.upper_bounds = Eigen::VectorXd(2); c_settings.upper_bounds << right[0], right[1];
+					auto optimal_displacment = ND_adpated_optimizer(bound_objective, { -MAX_DISP,-MAX_DISP }, { MAX_DISP,MAX_DISP }, 0, 100);
 
-						optim::Mat_t simplex_points(3, 2);
-						simplex_points.row(0) << -5, 10;
-						simplex_points.row(1) << 0, 15;
-						simplex_points.row(2) << -10, -5;
-						c_settings.nm_settings.custom_initial_simplex = true; c_settings.nm_settings.initial_simplex_points = simplex_points;
-						//c_settings.print_level = 3;
+					for (auto& c_v_handle : respective_vertices_handles) {
+						displacement_map[c_v_handle].first += optimal_displacment[0];
+						displacement_map[c_v_handle].second += optimal_displacment[1];
+					}
 
-						Eigen::VectorXd c_optimal_displacement(2); c_optimal_displacement << 0.0, 0.0;
-						auto ND_adapted_objective_fn = [&f, &MAX_DISP](const Eigen::VectorXd& vals_inp, Eigen::VectorXd* grad_out, void* opt_data)->double {
-							double fitness_factor = f({ vals_inp(0), vals_inp(1) });
-							return fitness_factor;
-						};
-						bool success = optim::nm(c_optimal_displacement, ND_adapted_objective_fn, nullptr, c_settings);
-						if (true)
-							return { c_optimal_displacement(0), c_optimal_displacement(1) };
-						else {
-							std::cout << "failed suboptimization!" << std::endl;
-							return { 0,0 };
-						}
-					};
-
-					auto optimal_displacment = ND_adpated_optimizer(bound_objective, { -20,-20 }, { 20,20 }, 0, 100);
-
-					for (auto& c_v_handle : respective_vertices_handles)
-						displacement_map[c_v_handle] = { optimal_displacment[0], optimal_displacment[1] };
-
-					std::cout << optimal_displacment[0] << " " << optimal_displacment[1] << std::endl;
-
+					for (auto v_handle : respective_vertices_handles) {
+						Geometries_with_attributes<Boost_Point_2> c_pt(Boost_Point_2(PointTraits<Point_2>::getX(v_handle->point()), PointTraits<Point_2>::getY(v_handle->point())));
+						c_pt.set_double_attribute("dx", optimal_displacment[0]);
+						c_pt.set_double_attribute("dy", optimal_displacment[1]);
+						pts_gvec.add_geometry(c_pt);
+					}
 				}
+				pts_gvec.to_file(params->temp_dir + "/_" + std::to_string(*distance_val_iter) + "vertices_disp.shp");				
 			}
 			
-			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, displacement_map);
-			aligned_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_parts.shp");
+			// per vertex refinement
+			/*for (auto v_handle = arr.vertices_begin(); v_handle != arr.vertices_end(); v_handle++) {
 
-			std::function<Geometries_with_attributes<Boost_LineString_2>(std::list<Geometries_with_attributes<Boost_LineString_2>>&)> reconstruction_fn = [](std::list<Geometries_with_attributes<Boost_LineString_2>>& geom_parts) ->Geometries_with_attributes<Boost_LineString_2> {
-				geom_parts.sort([](const Geometries_with_attributes<Boost_LineString_2>& a, const Geometries_with_attributes<Boost_LineString_2>& b) { return a.get_double_attribute("pos") < b.get_double_attribute("pos"); });
-				Boost_LineString_2 reconstructed_l; 
-				if (geom_parts.size() == 0) { return Geometries_with_attributes<Boost_LineString_2>(); }
-				if (geom_parts.size() == 1) {
-					return Geometries_with_attributes<Boost_LineString_2>(geom_parts.begin()->get_definition());
-				}
-				auto first_part = geom_parts.begin()->get_definition();
-				auto second_part = std::next(geom_parts.begin())->get_definition();
-				if (bg::distance(first_part.at(0), second_part.at(0))<1e-5 || bg::distance(first_part.at(0), second_part.at(1)) < 1e-5)
-					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(1)); // adding starting point
-				else
-					reconstructed_l.push_back(geom_parts.begin()->get_definition().at(0)); // adding starting point
-				for (const auto& geom_part : geom_parts) {
-					auto point_to_add = (bg::distance(reconstructed_l.back(), geom_part.get_definition().at(0)) < 1e-5) ? geom_part.get_definition().at(1) : geom_part.get_definition().at(0);
-					reconstructed_l.push_back(point_to_add);
+				std::function<double(const std::pair<double, double>&)> bound_objective = [&](const std::pair<double, double>& disp) ->double {
+					// TODO apply only on respective 
+					std::unordered_map<LinearTopology<EK>::Arrangement_2::Vertex_const_iterator, std::pair<double, double> > c_cluster_disp_map;
+					c_cluster_disp_map[v_handle] = { displacement_map[v_handle].first + disp.first, displacement_map[v_handle].second + disp.second };
+					LinearTopology<EK>::Arrangement_2::Halfedge_around_vertex_const_circulator  circ_first, circ_current;
+					circ_first = circ_current = v_handle->incident_halfedges();
+					do {
+						c_cluster_disp_map[circ_current->source()] = { 0,0 };
+					} while (++circ_current != circ_first);
+					
+					auto filtered_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&v_handle](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator v) {return v == v_handle; }, c_cluster_disp_map);
+
+					double total_fitness = 0.0, total_length = 0.0;
+					for (auto& c_gwa : filtered_gvec) {
+						double c_geometry_obj_val = linestring_fitness_evaluator(c_gwa.get_definition());
+						double c_edge_length = bg::length(c_gwa.get_definition());
+						total_fitness += (c_geometry_obj_val * c_edge_length);
+						total_length += c_edge_length;
+					}
+					double mean_fitness = total_fitness / total_length;
+					return mean_fitness;
 				};
-				Geometries_with_attributes<Boost_LineString_2> gwa_l(reconstructed_l);
-				return gwa_l;
-			};
+				auto optimal_displacment = ND_adpated_optimizer(bound_objective, { -5,-5 }, { 5,5 }, 0, 50);
+				displacement_map[v_handle].first += optimal_displacment[0];
+				displacement_map[v_handle].second += optimal_displacment[1];
+
+			}*/
+
+			auto aligned_gvec = LinearTopology<EK>::FilteredDisplacedGeovectorFromArrangment(arr, [&](LinearTopology<EK>::Arrangement_2::Vertex_const_iterator viter) {return true; }, displacement_map);
+			//aligned_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_parts.shp");
 
 			GeoVector<Boost_LineString_2> pooled_gvec;
 			pool_geovector(aligned_gvec, pooled_gvec, reconstruction_fn);
-			pooled_gvec.to_file("C:/DATA_SANDBOX/fault_to_align/data_mo_TIZ110723/data_mo_TIZ110723/example1Bishop/output_dir/aligned_full.shp");
+			pooled_gvec.to_file(params->temp_dir + "/aligned_full.shp");
 
-		}
+ 		}
 
 	}
 }

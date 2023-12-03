@@ -608,7 +608,7 @@ namespace LxGeo
 
 			for (auto distance_val_iter = neighbour_distance_band_values.rbegin(); distance_val_iter != neighbour_distance_band_values.rend(); ++distance_val_iter) {
 				GeoVector<Boost_Polygon_2> component_gvector;
-				//MAX_DISP /= 2;
+				MAX_DISP /= 2;
 
 				auto disconnection_lambda = [&distance_val_iter](double x)->bool {return x > *distance_val_iter; };
 				PSW.disconnect_edges(disconnection_lambda);
@@ -700,14 +700,14 @@ namespace LxGeo
 						return (a * fitness_factor * fitness_factor + b * same_direction_factor * displacement_factor + c * displacement_factor) / (a + b + c);
 					};
 
-					cluster_problem<int>::bound_type objective_boundary = { { -MAX_DISP, -MAX_DISP}, {MAX_DISP, MAX_DISP} };
-					pagmo::problem problem{cluster_problem{bound_objective, objective_boundary }};
+					cluster_problem<int>::bound_type objective_boundary = { { previous_step_disp_x_value -MAX_DISP, previous_step_disp_y_value -MAX_DISP}, {previous_step_disp_x_value+MAX_DISP, previous_step_disp_y_value+MAX_DISP} };
+					pagmo::problem problem{cluster_problem{improved_f, objective_boundary }};
 					pagmo::population pop{ problem, 10 };
 					pop.set_x(0, std::vector<double>(objective_boundary.first.size(), 0.0));
 
 					//pagmo::algorithm algo{pagmo::nlopt("neldermead")};
-					unsigned int num_gen = 10;
-					pagmo::algorithm algo{pagmo::de{num_gen}};
+					unsigned int num_gen = 50;
+					pagmo::algorithm algo{pagmo::pso{num_gen}};
 					pop = algo.evolve(pop);
 					double optimal_fitness = pop.champion_f()[0];
 					std::vector<double> optimal_displacement = pop.champion_x();

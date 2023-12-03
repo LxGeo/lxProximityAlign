@@ -1,6 +1,7 @@
 #include "parameters.h"
 //#include "optim_proximity_aligner.h"
 #include "optim_proximity_aligner_linear.h"
+#include "optim_proximity_aligner.h"
 
 
 
@@ -21,7 +22,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Runs process
-	OptimProximityAlignerLinear d_t= OptimProximityAlignerLinear();
+	OptimProximityAligner d_t= OptimProximityAligner();
 	if (d_t.pre_check())
 		d_t.run();
 
